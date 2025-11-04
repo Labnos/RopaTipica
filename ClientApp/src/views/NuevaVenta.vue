@@ -11,10 +11,9 @@
         <h2 class="section-title">Información del Cliente</h2>
         <div class="form-row">
           <div class="form-group">
-            <label>Cliente*</label>
+            <label>Cliente</label>
             <select v-model="venta.clienteId" class="form-select">
-              <option value="">Seleccionar cliente...</option>
-              <option value="general">Cliente General</option>
+              <option value="">Cliente General</option>
               <option v-for="cliente in clientes" :key="cliente.id" :value="cliente.id">
                 {{ cliente.nombre }}
               </option>
@@ -22,7 +21,7 @@
           </div>
           <div class="form-group">
             <label>Canal de Venta*</label>
-            <select v-model="venta.canal" class="form-select">
+            <select v-model="venta.canal" class="form-select" required>
               <option value="Fisico">Tienda Física</option>
               <option value="Facebook">Facebook</option>
               <option value="WhatsApp">WhatsApp</option>
@@ -38,7 +37,7 @@
           <button @click="showProductModal = true" class="btn btn-primary">+ Agregar Producto</button>
         </div>
 
-        <div v-if="venta.productos.length === 0" class="empty-state">
+        <div v-if="venta.detallesVentas.length === 0" class="empty-state">
           <p>🛒 No hay productos agregados</p>
           <p class="empty-subtitle">Haz clic en "Agregar Producto" para comenzar</p>
         </div>
@@ -49,7 +48,7 @@
               <tr>
                 <th>PRODUCTO</th>
                 <th>TIPO</th>
-                <th>CANTIDAD/VARAS</th>
+                <th>CANTIDAD</th>
                 <th>PRECIO UNITARIO</th>
                 <th>TIPO VENTA</th>
                 <th>SUBTOTAL</th>
@@ -57,8 +56,8 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, index) in venta.productos" :key="index">
-                <td><strong>{{ item.nombre }}</strong></td>
+              <tr v-for="(item, index) in venta.detallesVentas" :key="index">
+                <td><strong>{{ item.productoNombre }}</strong></td>
                 <td>{{ item.tipo }}</td>
                 <td>
                   <input 
@@ -117,7 +116,7 @@
         <div class="form-row">
           <div class="form-group">
             <label>Método de Pago*</label>
-            <select v-model="venta.metodoPago" class="form-select">
+            <select v-model="venta.metodoPago" class="form-select" required>
               <option value="Efectivo">Efectivo</option>
               <option value="Tarjeta">Tarjeta</option>
               <option value="Transferencia">Transferencia</option>
@@ -126,7 +125,7 @@
           </div>
           <div class="form-group">
             <label>Estado de Pago*</label>
-            <select v-model="venta.estadoPago" class="form-select">
+            <select v-model="venta.estadoPago" class="form-select" required>
               <option value="Pagado">Pagado</option>
               <option value="Pendiente">Pendiente</option>
             </select>
@@ -140,8 +139,8 @@
 
       <!-- Acciones -->
       <div class="form-actions">
-        <button @click="guardarVenta" class="btn btn-primary btn-lg" :disabled="!canSave">
-          💾 Guardar Venta
+        <button @click="guardarVenta" class="btn btn-primary btn-lg" :disabled="!canSave || saving">
+          {{ saving ? '⏳ Guardando...' : '💾 Guardar Venta' }}
         </button>
         <button @click="cancelar" class="btn btn-secondary btn-lg">
           Cancelar
@@ -160,7 +159,11 @@
           <div class="search-bar">
             <input v-model="searchProducto" type="text" placeholder="Buscar producto..." class="search-input" />
           </div>
-          <div class="products-list">
+          <div v-if="loadingProductos" class="loading-state">
+            <div class="spinner"></div>
+            <p>Cargando productos...</p>
+          </div>
+          <div v-else class="products-list">
             <div 
               v-for="producto in filteredProductos" 
               :key="producto.id" 
@@ -173,8 +176,15 @@
               </div>
               <div class="product-price">
                 <span>Q {{ producto.precioVenta.toFixed(2) }}</span>
-                <span class="product-stock">Stock: {{ producto.stock }}</span>
+                <span class="product-stock">
+                  {{ producto.tipo === 'Corte' 
+                    ? `Stock: ${producto.varasDisponibles} varas` 
+                    : `Stock: ${producto.stock}` }}
+                </span>
               </div>
+            </div>
+            <div v-if="filteredProductos.length === 0" class="no-data">
+              <p>No se encontraron productos</p>
             </div>
           </div>
         </div>
@@ -184,33 +194,26 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import api from '../services/api'
 
 const router = useRouter()
 const toast = useToast()
 
 const showProductModal = ref(false)
 const searchProducto = ref('')
+const loadingProductos = ref(false)
+const saving = ref(false)
 
-const clientes = ref([
-  { id: 1, nombre: 'María González' },
-  { id: 2, nombre: 'Ana Pérez' },
-  { id: 3, nombre: 'Carmen Hernández' }
-])
-
-const productosDisponibles = ref([
-  { id: 1, nombre: 'Corte Quiché', tipo: 'Corte', precioVenta: 1000.00, stock: 15, varasDisponibles: 8 },
-  { id: 2, nombre: 'Guipil Comalapa', tipo: 'Huipil', precioVenta: 1500.00, stock: 10, varasDisponibles: null },
-  { id: 3, nombre: 'Blusa Quiché', tipo: 'Blusa', precioVenta: 350.00, stock: 25, varasDisponibles: null },
-  { id: 4, nombre: 'Perraje Totonicapán', tipo: 'Perraje', precioVenta: 1750.00, stock: 5, varasDisponibles: null }
-])
+const clientes = ref([])
+const productos = ref([])
 
 const venta = ref({
   clienteId: '',
   canal: 'Fisico',
-  productos: [],
+  detallesVentas: [],
   descuento: 0,
   metodoPago: 'Efectivo',
   estadoPago: 'Pagado',
@@ -218,14 +221,14 @@ const venta = ref({
 })
 
 const filteredProductos = computed(() => {
-  if (!searchProducto.value) return productosDisponibles.value
-  return productosDisponibles.value.filter(p => 
+  if (!searchProducto.value) return productos.value
+  return productos.value.filter(p => 
     p.nombre.toLowerCase().includes(searchProducto.value.toLowerCase())
   )
 })
 
 const subtotal = computed(() => {
-  return venta.value.productos.reduce((sum, item) => sum + item.subtotal, 0)
+  return venta.value.detallesVentas.reduce((sum, item) => sum + item.subtotal, 0)
 })
 
 const iva = computed(() => {
@@ -237,8 +240,33 @@ const total = computed(() => {
 })
 
 const canSave = computed(() => {
-  return venta.value.clienteId && venta.value.productos.length > 0
+  return venta.value.detallesVentas.length > 0
 })
+
+// Cargar clientes
+const cargarClientes = async () => {
+  try {
+    const response = await api.get('/Clientes')
+    clientes.value = response.data.data || response.data || []
+  } catch (error) {
+    console.error('Error al cargar clientes:', error)
+    toast.warning('No se pudieron cargar los clientes')
+  }
+}
+
+// Cargar productos
+const cargarProductos = async () => {
+  loadingProductos.value = true
+  try {
+    const response = await api.get('/Productos')
+    productos.value = response.data.data || response.data || []
+  } catch (error) {
+    console.error('Error al cargar productos:', error)
+    toast.error('Error al cargar productos')
+  } finally {
+    loadingProductos.value = false
+  }
+}
 
 const selectProducto = (producto) => {
   const cantidad = producto.tipo === 'Corte' ? 8 : 1
@@ -246,7 +274,7 @@ const selectProducto = (producto) => {
   
   const item = {
     productoId: producto.id,
-    nombre: producto.nombre,
+    productoNombre: producto.nombre,
     tipo: producto.tipo,
     cantidad: cantidad,
     precioUnitario: producto.precioVenta,
@@ -254,7 +282,7 @@ const selectProducto = (producto) => {
     subtotal: cantidad * producto.precioVenta
   }
   
-  venta.value.productos.push(item)
+  venta.value.detallesVentas.push(item)
   showProductModal.value = false
   searchProducto.value = ''
   
@@ -278,18 +306,44 @@ const calcularSubtotal = (item) => {
 }
 
 const removeProducto = (index) => {
-  venta.value.productos.splice(index, 1)
+  venta.value.detallesVentas.splice(index, 1)
 }
 
-const guardarVenta = () => {
+const guardarVenta = async () => {
   if (!canSave.value) {
     toast.error('Complete los datos requeridos')
     return
   }
-  
-  // Aquí iría la llamada al API
-  toast.success('Venta registrada exitosamente')
-  router.push('/ventas')
+
+  saving.value = true
+
+  try {
+    const ventaData = {
+      clienteId: venta.value.clienteId || null,
+      canal: venta.value.canal,
+      metodoPago: venta.value.metodoPago,
+      estadoPago: venta.value.estadoPago,
+      observaciones: venta.value.observaciones,
+      detallesVentas: venta.value.detallesVentas.map(d => ({
+        productoId: d.productoId,
+        cantidad: d.cantidad,
+        precioUnitario: d.precioUnitario,
+        varasVendidas: d.tipo === 'Corte' ? d.cantidad : null
+      }))
+    }
+
+    const response = await api.post('/Ventas', ventaData)
+    
+    if (response.data.success) {
+      toast.success('Venta registrada exitosamente')
+      router.push('/ventas')
+    }
+  } catch (error) {
+    console.error('Error al guardar venta:', error)
+    toast.error(error.response?.data?.message || 'Error al guardar la venta')
+  } finally {
+    saving.value = false
+  }
 }
 
 const cancelar = () => {
@@ -297,6 +351,11 @@ const cancelar = () => {
     router.push('/ventas')
   }
 }
+
+onMounted(() => {
+  cargarClientes()
+  cargarProductos()
+})
 </script>
 
 <style scoped>
@@ -572,6 +631,7 @@ const cancelar = () => {
 .modal-body {
   padding: 24px;
   overflow-y: auto;
+  flex: 1;
 }
 
 .search-bar {
@@ -584,6 +644,27 @@ const cancelar = () => {
   border: 2px solid var(--color-border);
   border-radius: var(--border-radius-md);
   font-size: 15px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .products-list {
@@ -636,5 +717,27 @@ const cancelar = () => {
   font-size: 12px;
   color: var(--color-text-muted);
   font-weight: normal !important;
+}
+
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 768px) {
+  .page-container {
+    padding: 20px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
 }
 </style>
