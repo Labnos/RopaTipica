@@ -1,16 +1,540 @@
 <template>
-  <div class="page">
-    <h1>[Nombre del Módulo]</h1>
-    <p>Módulo en construcción...</p>
+  <div class="page-container">
+    <div class="page-header">
+      <h1>Gestión de Promociones</h1>
+      <button @click="openModal()" class="btn btn-primary">+ Nueva Promoción</button>
+    </div>
+
+    <div class="filters-bar">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input v-model="searchQuery" type="text" placeholder="Buscar promoción..." class="search-input" />
+      </div>
+      <select v-model="filterEstado" class="filter-select">
+        <option value="all">Estado: Todas</option>
+        <option value="activa">Activas</option>
+        <option value="programada">Programadas</option>
+        <option value="finalizada">Finalizadas</option>
+      </select>
+    </div>
+
+    <!-- Promociones Activas -->
+    <div class="promotions-section">
+      <h2 class="section-title">Promociones Activas</h2>
+      <div class="promotions-grid">
+        <div v-for="promo in activePromociones" :key="promo.id" class="promo-card active">
+          <div class="promo-badge">🔥 ACTIVA</div>
+          <h3>{{ promo.nombre }}</h3>
+          <p class="promo-description">{{ promo.descripcion }}</p>
+          <div class="promo-details">
+            <div class="promo-detail">
+              <span class="label">Producto:</span>
+              <span class="value">{{ promo.producto }}</span>
+            </div>
+            <div class="promo-detail">
+              <span class="label">Descuento:</span>
+              <span class="value discount">{{ promo.descuento }}</span>
+            </div>
+            <div class="promo-detail">
+              <span class="label">Válido hasta:</span>
+              <span class="value">{{ promo.fechaFin }}</span>
+            </div>
+          </div>
+          <div class="promo-actions">
+            <button @click="openModal(promo)" class="btn btn-secondary btn-sm">Editar</button>
+            <button @click="finalizarPromocion(promo.id)" class="btn btn-warning btn-sm">Finalizar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla de todas las promociones -->
+    <div class="all-promotions">
+      <h2 class="section-title">Historial de Promociones</h2>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>NOMBRE</th>
+              <th>PRODUCTO</th>
+              <th>TIPO</th>
+              <th>DESCUENTO</th>
+              <th>FECHA INICIO</th>
+              <th>FECHA FIN</th>
+              <th>ESTADO</th>
+              <th>ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="promo in filteredPromociones" :key="promo.id">
+              <td><strong>{{ promo.nombre }}</strong></td>
+              <td>{{ promo.producto }}</td>
+              <td>{{ promo.tipo }}</td>
+              <td><span class="discount-badge">{{ promo.descuento }}</span></td>
+              <td>{{ promo.fechaInicio }}</td>
+              <td>{{ promo.fechaFin }}</td>
+              <td><span :class="['status', `status-${promo.estado}`]">{{ promo.estado.toUpperCase() }}</span></td>
+              <td>
+                <button @click="openModal(promo)" class="btn-icon">✏️</button>
+                <button @click="deletePromocion(promo.id)" class="btn-icon">🗑️</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>{{ isEditing ? 'Editar Promoción' : 'Nueva Promoción' }}</h2>
+          <button @click="closeModal" class="btn-close">✕</button>
+        </div>
+        <form @submit.prevent="savePromocion" class="modal-form">
+          <div class="form-group">
+            <label>Nombre de la Promoción*</label>
+            <input v-model="formData.nombre" type="text" required placeholder="Ej: Descuento Black Friday" />
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea v-model="formData.descripcion" rows="3" placeholder="Describe la promoción..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Producto*</label>
+              <input v-model="formData.producto" type="text" required />
+            </div>
+            <div class="form-group">
+              <label>Tipo de Descuento*</label>
+              <select v-model="formData.tipo" required>
+                <option value="Porcentaje">Porcentaje</option>
+                <option value="Monto">Monto Fijo</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Valor del Descuento*</label>
+              <input v-model="formData.valorDescuento" type="number" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>{{ formData.tipo === 'Porcentaje' ? '% de descuento' : 'Monto en Q' }}</label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Fecha Inicio*</label>
+              <input v-model="formData.fechaInicio" type="date" required />
+            </div>
+            <div class="form-group">
+              <label>Fecha Fin*</label>
+              <input v-model="formData.fechaFin" type="date" required />
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="btn btn-primary">{{ isEditing ? 'Actualizar' : 'Crear Promoción' }}</button>
+            <button type="button" @click="closeModal" class="btn btn-secondary">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-// Lógica aquí
+import { ref, computed } from 'vue'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
+const searchQuery = ref('')
+const filterEstado = ref('all')
+const showModal = ref(false)
+const isEditing = ref(false)
+
+const formData = ref({
+  nombre: '',
+  descripcion: '',
+  producto: '',
+  tipo: 'Porcentaje',
+  valorDescuento: '',
+  fechaInicio: '',
+  fechaFin: ''
+})
+
+const promociones = ref([
+  { id: 1, nombre: 'Liquidación Cortes', descripcion: 'Descuento en cortes de temporada', producto: 'Corte Quiché', tipo: 'Porcentaje', descuento: '15%', fechaInicio: '01/11/2025', fechaFin: '30/11/2025', estado: 'activa' },
+  { id: 2, nombre: 'Promo Huipiles', descripcion: '2x1 en huipiles seleccionados', producto: 'Huipil Nebaj', tipo: 'Monto', descuento: 'Q 200', fechaInicio: '15/10/2025', fechaFin: '15/11/2025', estado: 'activa' },
+  { id: 3, nombre: 'Black Friday', descripcion: 'Descuento especial fin de año', producto: 'Todos', tipo: 'Porcentaje', descuento: '25%', fechaInicio: '25/11/2025', fechaFin: '30/11/2025', estado: 'programada' },
+  { id: 4, nombre: 'Verano 2024', descripcion: 'Liquidación verano', producto: 'Blusas', tipo: 'Porcentaje', descuento: '20%', fechaInicio: '01/06/2024', fechaFin: '31/08/2024', estado: 'finalizada' }
+])
+
+const activePromociones = computed(() => promociones.value.filter(p => p.estado === 'activa'))
+
+const filteredPromociones = computed(() => {
+  let filtered = promociones.value
+  if (searchQuery.value) {
+    filtered = filtered.filter(p => p.nombre.toLowerCase().includes(searchQuery.value.toLowerCase()))
+  }
+  if (filterEstado.value !== 'all') {
+    filtered = filtered.filter(p => p.estado === filterEstado.value)
+  }
+  return filtered
+})
+
+const openModal = (promo = null) => {
+  if (promo) {
+    isEditing.value = true
+    formData.value = { ...promo }
+  } else {
+    isEditing.value = false
+    formData.value = { nombre: '', descripcion: '', producto: '', tipo: 'Porcentaje', valorDescuento: '', fechaInicio: '', fechaFin: '' }
+  }
+  showModal.value = true
+}
+
+const closeModal = () => {
+  showModal.value = false
+}
+
+const savePromocion = () => {
+  if (isEditing.value) {
+    const index = promociones.value.findIndex(p => p.id === formData.value.id)
+    if (index !== -1) {
+      promociones.value[index] = { ...formData.value, descuento: formData.value.tipo === 'Porcentaje' ? `${formData.value.valorDescuento}%` : `Q ${formData.value.valorDescuento}` }
+      toast.success('Promoción actualizada')
+    }
+  } else {
+    promociones.value.push({
+      ...formData.value,
+      id: promociones.value.length + 1,
+      descuento: formData.value.tipo === 'Porcentaje' ? `${formData.value.valorDescuento}%` : `Q ${formData.value.valorDescuento}`,
+      estado: 'activa'
+    })
+    toast.success('Promoción creada')
+  }
+  closeModal()
+}
+
+const finalizarPromocion = (id) => {
+  const promo = promociones.value.find(p => p.id === id)
+  if (promo) {
+    promo.estado = 'finalizada'
+    toast.success('Promoción finalizada')
+  }
+}
+
+const deletePromocion = (id) => {
+  if (confirm('¿Eliminar promoción?')) {
+    promociones.value = promociones.value.filter(p => p.id !== id)
+    toast.success('Promoción eliminada')
+  }
+}
 </script>
 
 <style scoped>
-.page {
+@import '../assets/styles/global.css';
+
+.page-container {
   padding: 40px;
+  background: var(--color-background);
+  min-height: 100vh;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.page-header h1 {
+  font-family: var(--font-title);
+  font-size: 32px;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.filters-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 14px 16px 14px 48px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  font-size: 15px;
+  background: white;
+}
+
+.filter-select {
+  padding: 14px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: white;
+  min-width: 200px;
+}
+
+.promotions-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-family: var(--font-title);
+  font-size: 22px;
+  color: var(--color-text-primary);
+  margin: 0 0 20px 0;
+}
+
+.promotions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.promo-card {
+  background: white;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  position: relative;
+}
+
+.promo-card.active {
+  border-color: var(--color-success);
+  background: linear-gradient(135deg, #ffffff 0%, #f0fff4 100%);
+}
+
+.promo-badge {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  background: var(--color-success);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+}
+
+.promo-card h3 {
+  font-family: var(--font-title);
+  font-size: 20px;
+  color: var(--color-primary);
+  margin: 0 0 8px 0;
+}
+
+.promo-description {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 0 16px 0;
+}
+
+.promo-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.promo-detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.promo-detail .label {
+  color: var(--color-text-secondary);
+}
+
+.promo-detail .value {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.promo-detail .discount {
+  color: var(--color-success);
+  font-weight: var(--font-weight-bold);
+  font-size: 16px;
+}
+
+.promo-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.table-container {
+  background: white;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table thead {
+  background: var(--color-background-secondary);
+}
+
+.data-table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.data-table td {
+  padding: 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-background);
+}
+
+.discount-badge {
+  background: var(--color-success-light);
+  color: var(--color-success);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: var(--font-weight-bold);
+}
+
+.status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.status-activa {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.status-programada {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
+.status-finalizada {
+  background: var(--color-background-secondary);
+  color: var(--color-text-muted);
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 18px;
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: white;
+  border: 3px solid var(--color-primary);
+  border-radius: var(--border-radius-lg);
+  max-width: 700px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.modal-header h2 {
+  font-family: var(--font-title);
+  font-size: 24px;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.modal-form {
+  padding: 24px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: var(--font-weight-medium);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  font-size: 15px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-actions .btn {
+  flex: 1;
 }
 </style>
