@@ -15,7 +15,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // Backend .NET
+        target: 'http://localhost:5229', // Backend .NET
         changeOrigin: true,
         secure: false
       }

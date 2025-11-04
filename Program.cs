@@ -8,7 +8,7 @@ using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuración de servicios
+// ====================== CONFIGURACIÓN DE SERVICIOS ======================
 builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
     {
@@ -16,8 +16,9 @@ builder.Services.AddControllersWithViews()
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 
-// Base de datos
+// ---------- Conexión a base de datos ----------
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 try
 {
     using var conn = new MySqlConnection(connectionString);
@@ -35,7 +36,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         .EnableDetailedErrors(builder.Environment.IsDevelopment())
 );
 
-// JWT
+// ---------- Configuración JWT ----------
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
 
@@ -57,7 +58,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// CORS
+// ---------- Configuración CORS ----------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -68,7 +69,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Servicios personalizados
+// ---------- Servicios personalizados ----------
 builder.Services.AddScoped<InventarioRopaTipica.Helpers.JwtHelper>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IAuthService, InventarioRopaTipica.Services.AuthService>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IUserService, InventarioRopaTipica.Services.UserService>();
@@ -77,55 +78,23 @@ builder.Services.AddScoped<InventarioRopaTipica.Services.IVentaService, Inventar
 builder.Services.AddScoped<InventarioRopaTipica.Services.IClienteService, InventarioRopaTipica.Services.ClienteService>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IProveedorService, InventarioRopaTipica.Services.ProveedorService>();
 
-// SPA Static Files
+// ---------- Archivos estáticos SPA ----------
 builder.Services.AddSpaStaticFiles(configuration =>
 {
     configuration.RootPath = "wwwroot";
 });
 
+// ====================== CONSTRUCCIÓN DEL APP ======================
 var app = builder.Build();
 
-// Pipeline HTTP
-if (app.Environment.IsDevelopment())
+// ---------- Pipeline HTTP ----------
+if (!app.Environment.IsDevelopment())
 {
-    // En desarrollo, lanzar el servidor de Vite automáticamente
-    var clientAppPath = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp");
-
-    var viteProcess = new System.Diagnostics.Process
-    {
-        StartInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "npm",
-            Arguments = "run dev",
-            WorkingDirectory = clientAppPath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = false
-        }
-    };
-
-    viteProcess.OutputDataReceived += (sender, args) => Console.WriteLine(args.Data);
-    viteProcess.ErrorDataReceived += (sender, args) => Console.WriteLine($"❌ Vite error: {args.Data}");
-
-    viteProcess.Start();
-    viteProcess.BeginOutputReadLine();
-    viteProcess.BeginErrorReadLine();
-
-    // Conecta el backend al servidor de desarrollo Vite
-    app.UseSpa(spa =>
-    {
-        spa.Options.SourcePath = "ClientApp";
-        spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
-    });
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
 }
-else
-{
-    // En producción, sirve los archivos generados por Vite desde wwwroot
-    app.UseSpa(spa => { spa.Options.SourcePath = "wwwroot"; });
-}
-// IMPORTANTE: Comentar esto en producción para evitar redirección HTTPS
-// app.UseHttpsRedirection();
+
+// app.UseHttpsRedirection(); // ⚠️ Desactivar en desarrollo si causa redirecciones no deseadas
 
 app.UseStaticFiles();
 app.UseSpaStaticFiles();
@@ -138,44 +107,76 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "api",
-    pattern: "api/{controller}/{action}/{id?}");
+    pattern: "api/{controller}/{action}/{id?}"
+);
 
-// Configuración SPA
+// ====================== SPA (VITE) ======================
 app.UseSpa(spa =>
 {
     spa.Options.SourcePath = "ClientApp";
 
     if (app.Environment.IsDevelopment())
     {
-        // Ejecutar automáticamente Vite cuando se inicie el backend
         var clientAppPath = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp");
-        var viteProcess = new System.Diagnostics.Process
+        var npmPath = "npm";
+
+        // Solo ejecuta npm si está instalado en el sistema
+        bool npmExists = System.IO.File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "npm.cmd"))
+                      || System.IO.File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "npm.cmd"))
+                      || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PATH")?.Split(';').FirstOrDefault(p => p.Contains("nodejs")));
+
+        if (npmExists)
         {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
+            try
             {
-                FileName = "npm",
-                Arguments = "run dev",
-                WorkingDirectory = clientAppPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = false
+                Console.WriteLine("🚀 Iniciando Vite dev server...");
+
+                var viteProcess = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = npmPath,
+                        Arguments = "run dev",
+                        WorkingDirectory = clientAppPath,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                viteProcess.OutputDataReceived += (sender, args) =>
+                {
+                    if (!string.IsNullOrEmpty(args.Data))
+                        Console.WriteLine($"[Vite] {args.Data}");
+                };
+
+                viteProcess.ErrorDataReceived += (sender, args) =>
+                {
+                    if (!string.IsNullOrEmpty(args.Data))
+                        Console.WriteLine($"❌ [Vite Error] {args.Data}");
+                };
+
+                viteProcess.Start();
+                viteProcess.BeginOutputReadLine();
+                viteProcess.BeginErrorReadLine();
             }
-        };
-
-        viteProcess.OutputDataReceived += (sender, args) => Console.WriteLine(args.Data);
-        viteProcess.ErrorDataReceived += (sender, args) => Console.WriteLine($"❌ Vite error: {args.Data}");
-
-        viteProcess.Start();
-        viteProcess.BeginOutputReadLine();
-        viteProcess.BeginErrorReadLine();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ No se pudo iniciar el servidor de Vite automáticamente: {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("⚠️ npm no está instalado o no se encuentra en PATH. Ejecuta manualmente 'npm run dev' en la carpeta ClientApp.");
+        }
 
         // Proxy hacia el servidor de desarrollo de Vite
         spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
     }
     else
     {
-        // En producción, sirve el contenido de wwwroot
+        // En producción, sirve los archivos compilados desde wwwroot
         spa.Options.DefaultPageStaticFileOptions = new StaticFileOptions
         {
             OnPrepareResponse = ctx =>
@@ -186,4 +187,5 @@ app.UseSpa(spa =>
     }
 });
 
+// ====================== EJECUCIÓN ======================
 app.Run();
