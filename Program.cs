@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using InventarioRopaTipica.Data;
 using InventarioRopaTipica.Middleware;
+using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,8 +18,19 @@ builder.Services.AddControllersWithViews()
 
 // Base de datos
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+try
+{
+    using var conn = new MySqlConnection(connectionString);
+    conn.Open();
+    Console.WriteLine("✅ Conexión exitosa al servidor MySQL");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Error de conexión: {ex.Message}");
+}
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
+    options.UseMySql(connectionString, ServerVersion.Parse("8.0.30-mysql"))
         .EnableSensitiveDataLogging(builder.Environment.IsDevelopment())
         .EnableDetailedErrors(builder.Environment.IsDevelopment())
 );
@@ -74,12 +86,44 @@ builder.Services.AddSpaStaticFiles(configuration =>
 var app = builder.Build();
 
 // Pipeline HTTP
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
-    app.UseHsts();
-}
+    // En desarrollo, lanzar el servidor de Vite automáticamente
+    var clientAppPath = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp");
 
+    var viteProcess = new System.Diagnostics.Process
+    {
+        StartInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "npm",
+            Arguments = "run dev",
+            WorkingDirectory = clientAppPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = false
+        }
+    };
+
+    viteProcess.OutputDataReceived += (sender, args) => Console.WriteLine(args.Data);
+    viteProcess.ErrorDataReceived += (sender, args) => Console.WriteLine($"❌ Vite error: {args.Data}");
+
+    viteProcess.Start();
+    viteProcess.BeginOutputReadLine();
+    viteProcess.BeginErrorReadLine();
+
+    // Conecta el backend al servidor de desarrollo Vite
+    app.UseSpa(spa =>
+    {
+        spa.Options.SourcePath = "ClientApp";
+        spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
+    });
+}
+else
+{
+    // En producción, sirve los archivos generados por Vite desde wwwroot
+    app.UseSpa(spa => { spa.Options.SourcePath = "wwwroot"; });
+}
 // IMPORTANTE: Comentar esto en producción para evitar redirección HTTPS
 // app.UseHttpsRedirection();
 
@@ -103,8 +147,42 @@ app.UseSpa(spa =>
 
     if (app.Environment.IsDevelopment())
     {
-        // En desarrollo, proxy a Vite
+        // Ejecutar automáticamente Vite cuando se inicie el backend
+        var clientAppPath = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp");
+        var viteProcess = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "npm",
+                Arguments = "run dev",
+                WorkingDirectory = clientAppPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = false
+            }
+        };
+
+        viteProcess.OutputDataReceived += (sender, args) => Console.WriteLine(args.Data);
+        viteProcess.ErrorDataReceived += (sender, args) => Console.WriteLine($"❌ Vite error: {args.Data}");
+
+        viteProcess.Start();
+        viteProcess.BeginOutputReadLine();
+        viteProcess.BeginErrorReadLine();
+
+        // Proxy hacia el servidor de desarrollo de Vite
         spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
+    }
+    else
+    {
+        // En producción, sirve el contenido de wwwroot
+        spa.Options.DefaultPageStaticFileOptions = new StaticFileOptions
+        {
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store");
+            }
+        };
     }
 });
 

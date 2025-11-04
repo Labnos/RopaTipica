@@ -1,3 +1,6 @@
+##############################
+#   FRONTEND (Vite + Vue)   #
+##############################
 # Logs
 logs
 *.log
@@ -7,18 +10,105 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependency directories
+node_modules/
+dist/
+dist-ssr/
 *.local
 
-# Editor directories and files
+# Editor config
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Env files (credenciales, API keys, etc.)
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+
+##########################
+#   BACKEND (.NET Core)  #
+##########################
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+_ReSharper*/
+*_i.c
+*_p.c
+*_h.h
+*.tlog
+*.pdb
+*.cachefile
+*.vspx
+*.vspscc
+*.vssscc
+
+# Publish output
+wwwroot/assets/
+wwwroot/node_modules/
+wwwroot/dist/
+publish/
+*.Publish.xml
+*.pubxml
+*.pubxml.user
+*.publishproj
+
+# Others
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.local.json
+Properties/launchSettings.json
+
+# NuGet
+*.nupkg
+*.snupkg
+*.nuget.props
+*.nuget.targets
+packages/
+.nuget/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# macOS / Windows junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+
+##########################
+#   MISC & TEMPORARY    #
+##########################
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Backup or test folders
+__pycache__/
+temp/
+tests/bin/
+tests/obj/

@@ -15,14 +15,14 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5000', // Backend .NET
         changeOrigin: true,
         secure: false
       }
     }
   },
   build: {
-    outDir: '../wwwroot',
+    outDir: '../wwwroot', // Esto hace que el build de producción se copie a wwwroot
     emptyOutDir: true,
     assetsDir: 'assets'
   }
