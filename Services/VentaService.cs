@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using InventarioRopaTipica.Data;
 using InventarioRopaTipica.DTOs;
 using InventarioRopaTipica.Models;
@@ -8,11 +9,17 @@ namespace InventarioRopaTipica.Services
     public class VentaService : IVentaService
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<VentaService> _logger;
 
-        public VentaService(ApplicationDbContext context)
+        public VentaService(ApplicationDbContext context, ILogger<VentaService> logger)
         {
             _context = context;
+            _logger = logger;
         }
+
+        // =============================
+        // MÉTODOS PRINCIPALES DE VENTAS
+        // =============================
 
         public async Task<ApiResponse<List<VentaDto>>> GetAllVentasAsync()
         {
@@ -61,6 +68,7 @@ namespace InventarioRopaTipica.Services
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error al obtener todas las ventas");
                 return ApiResponse<List<VentaDto>>.ErrorResponse($"Error al obtener ventas: {ex.Message}");
             }
         }
@@ -115,6 +123,7 @@ namespace InventarioRopaTipica.Services
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error al obtener venta {VentaId}", id);
                 return ApiResponse<VentaDto>.ErrorResponse($"Error al obtener venta: {ex.Message}");
             }
         }
@@ -124,14 +133,10 @@ namespace InventarioRopaTipica.Services
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Generar número de factura único
                 var numeroFactura = $"FAC-{DateTime.Now:yyyyMMddHHmmss}";
-
-                // Calcular totales
                 decimal subtotal = 0;
                 decimal descuentoTotal = 0;
 
-                // Crear la venta
                 var venta = new Venta
                 {
                     NumeroFactura = numeroFactura,
@@ -148,7 +153,6 @@ namespace InventarioRopaTipica.Services
                 _context.Ventas.Add(venta);
                 await _context.SaveChangesAsync();
 
-                // Procesar detalles de venta
                 foreach (var detalleDto in createVentaDto.DetallesVentas)
                 {
                     var producto = await _context.Productos.FindAsync(detalleDto.ProductoId);
@@ -158,41 +162,37 @@ namespace InventarioRopaTipica.Services
                         return ApiResponse<VentaDto>.ErrorResponse($"Producto con ID {detalleDto.ProductoId} no encontrado");
                     }
 
-                    // VALIDACIÓN CRÍTICA: Determinar tipo de venta para CORTES
-                    string tipoVenta = "Completo";
+                    var tipoVenta = "Completo";
                     decimal? varasVendidas = null;
 
                     if (producto.Tipo == "Corte")
                     {
-                        // Para cortes, usar varas vendidas
                         varasVendidas = detalleDto.VarasVendidas ?? detalleDto.Cantidad;
 
-                        // REGLA DE NEGOCIO: Si vende menos de 8 varas = Parcial
                         if (varasVendidas < 8.00m)
-                        {
                             tipoVenta = "Parcial";
-                        }
 
-                        // Validar stock disponible
                         if (producto.VarasDisponibles < varasVendidas)
                         {
                             await transaction.RollbackAsync();
                             return ApiResponse<VentaDto>.ErrorResponse(
                                 $"Stock insuficiente para {producto.Nombre}. Disponible: {producto.VarasDisponibles} varas");
                         }
+
+                        producto.VarasDisponibles -= varasVendidas.Value;
                     }
                     else
                     {
-                        // Para otros productos, validar stock normal
                         if (producto.Stock < detalleDto.Cantidad)
                         {
                             await transaction.RollbackAsync();
                             return ApiResponse<VentaDto>.ErrorResponse(
                                 $"Stock insuficiente para {producto.Nombre}. Disponible: {producto.Stock} unidades");
                         }
+
+                        producto.Stock -= detalleDto.Cantidad;
                     }
 
-                    // Crear detalle de venta
                     var detalleVenta = new DetalleVenta
                     {
                         VentaId = venta.Id,
@@ -200,24 +200,17 @@ namespace InventarioRopaTipica.Services
                         Cantidad = detalleDto.Cantidad,
                         VarasVendidas = varasVendidas,
                         PrecioUnitario = detalleDto.PrecioUnitario,
-                        TipoVenta = tipoVenta, // CRÍTICO: Marcar si es Completo o Parcial
+                        TipoVenta = tipoVenta,
                         DescuentoAplicado = 0,
                         PromocionId = detalleDto.PromocionId
                     };
 
                     _context.DetalleVentas.Add(detalleVenta);
 
-                    // Calcular subtotal del detalle
-                    decimal subtotalDetalle = detalleDto.PrecioUnitario * detalleDto.Cantidad;
-                    subtotal += subtotalDetalle;
-
-                    // Nota: El trigger de MySQL se encargará de actualizar el stock y estado del corte
+                    subtotal += detalleDto.PrecioUnitario * detalleDto.Cantidad;
                 }
 
-                await _context.SaveChangesAsync();
-
-                // Actualizar totales de la venta
-                decimal iva = subtotal * 0.12m; // 12% IVA en Guatemala
+                decimal iva = subtotal * 0.12m;
                 decimal total = subtotal + iva - descuentoTotal;
 
                 venta.Subtotal = subtotal;
@@ -228,13 +221,15 @@ namespace InventarioRopaTipica.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // Retornar la venta creada
                 var ventaCreada = await GetVentaByIdAsync(venta.Id);
+                _logger.LogInformation("Venta creada exitosamente. ID: {VentaId}", venta.Id);
+
                 return ApiResponse<VentaDto>.SuccessResponse(ventaCreada.Data, "Venta creada exitosamente");
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
+                _logger.LogError(ex, "Error al crear venta por usuario {UserId}", userId);
                 return ApiResponse<VentaDto>.ErrorResponse($"Error al crear venta: {ex.Message}");
             }
         }
@@ -254,7 +249,6 @@ namespace InventarioRopaTipica.Services
                 if (venta.EstadoVenta == "Cancelada")
                     return ApiResponse<bool>.ErrorResponse("La venta ya está cancelada");
 
-                // Devolver stock
                 foreach (var detalle in venta.DetallesVentas)
                 {
                     var producto = await _context.Productos.FindAsync(detalle.ProductoId);
@@ -263,12 +257,7 @@ namespace InventarioRopaTipica.Services
                         if (producto.Tipo == "Corte" && detalle.VarasVendidas.HasValue)
                         {
                             producto.VarasDisponibles += detalle.VarasVendidas.Value;
-                            
-                            // Actualizar estado del corte
-                            if (producto.VarasDisponibles >= producto.VarasOriginales)
-                                producto.EstadoCorte = "Completo";
-                            else if (producto.VarasDisponibles > 0)
-                                producto.EstadoCorte = "Parcial";
+                            producto.EstadoCorte = producto.VarasDisponibles >= producto.VarasOriginales ? "Completo" : "Parcial";
                         }
                         else
                         {
@@ -281,19 +270,17 @@ namespace InventarioRopaTipica.Services
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                _logger.LogInformation("Venta {VentaId} cancelada exitosamente por usuario {UserId}", id, userId);
                 return ApiResponse<bool>.SuccessResponse(true, "Venta cancelada exitosamente");
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
+                _logger.LogError(ex, "Error al cancelar venta {VentaId}", id);
                 return ApiResponse<bool>.ErrorResponse($"Error al cancelar venta: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// VALIDACIÓN CRÍTICA: Valida si un detalle de venta puede ser devuelto
-        /// Regla: NO se permiten devoluciones de ventas PARCIALES
-        /// </summary>
         public async Task<ApiResponse<bool>> ValidarDevolucionAsync(int detalleVentaId)
         {
             try
@@ -305,20 +292,110 @@ namespace InventarioRopaTipica.Services
                 if (detalle == null)
                     return ApiResponse<bool>.ErrorResponse("Detalle de venta no encontrado");
 
-                // REGLA DE NEGOCIO: Si es venta PARCIAL, NO se permite devolución
                 if (detalle.TipoVenta == "Parcial")
-                {
-                    return ApiResponse<bool>.ErrorResponse(
-                        "No se permiten devoluciones de ventas parciales. " +
-                        "Solo productos vendidos completos pueden ser devueltos.");
-                }
+                    return ApiResponse<bool>.ErrorResponse("No se permiten devoluciones de ventas parciales.");
 
                 return ApiResponse<bool>.SuccessResponse(true, "El producto puede ser devuelto");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error al validar devolución {DetalleId}", detalleVentaId);
                 return ApiResponse<bool>.ErrorResponse($"Error al validar devolución: {ex.Message}");
             }
         }
+
+        // ===========================
+        // MÉTODOS ADICIONALES DASHBOARD
+        // ===========================
+
+        public async Task<ApiResponse<List<TopProductoDto>>> GetTopProductosAsync(int topN = 5)
+        {
+            var top = await _context.DetalleVentas
+                .Include(dv => dv.Producto)
+                .GroupBy(dv => dv.Producto.Nombre)
+                .Select(g => new TopProductoDto
+                {
+                    Producto = g.Key,
+                    CantidadVendida = g.Sum(x => x.Cantidad)
+                })
+                .OrderByDescending(x => x.CantidadVendida)
+                .Take(topN)
+                .ToListAsync();
+
+            return ApiResponse<List<TopProductoDto>>.SuccessResponse(top);
+        }
+
+        public async Task<ApiResponse<List<object>>> GetVentasMensualesAsync(int year)
+        {
+            var ventas = await _context.Ventas
+                .Where(v => v.Fecha.Year == year && v.EstadoVenta != "Cancelada")
+                .GroupBy(v => v.Fecha.Month)
+                .Select(g => new
+                {
+                    Mes = g.Key,
+                    Total = g.Sum(x => x.Total)
+                })
+                .OrderBy(x => x.Mes)
+                .ToListAsync();
+
+            return ApiResponse<List<object>>.SuccessResponse(ventas.Cast<object>().ToList());
+        }
+
+        public async Task<ApiResponse<object>> GetResumenVentasAsync()
+        {
+            var totalVentas = await _context.Ventas.CountAsync(v => v.EstadoVenta != "Cancelada");
+            var totalCanceladas = await _context.Ventas.CountAsync(v => v.EstadoVenta == "Cancelada");
+            var totalIngresos = await _context.Ventas
+                .Where(v => v.EstadoVenta != "Cancelada")
+                .SumAsync(v => v.Total);
+
+            var ventasMesActual = await _context.Ventas
+                .Where(v => v.Fecha.Month == DateTime.Now.Month && v.Fecha.Year == DateTime.Now.Year)
+                .SumAsync(v => v.Total);
+
+            return ApiResponse<object>.SuccessResponse(new
+            {
+                totalVentas,
+                totalCanceladas,
+                totalIngresos,
+                ventasMesActual
+            });
+        }
+
+        public async Task<ApiResponse<DashboardResumenDto>> GetDashboardResumenAsync()
+        {
+            try
+            {
+                var hoy = DateTime.Today;
+
+                var ingresosHoy = await _context.Ventas
+                    .Where(v => v.Fecha.Date == hoy && v.EstadoVenta == "Completada")
+                    .SumAsync(v => (decimal?)v.Total) ?? 0;
+
+                var ventasHoy = await _context.Ventas
+                    .CountAsync(v => v.Fecha.Date == hoy && v.EstadoVenta == "Completada");
+
+                var ventasPendientes = await _context.Ventas
+                    .CountAsync(v => v.EstadoPago == "Pendiente");
+
+                var productosBajoStock = await _context.Productos
+                    .CountAsync(p => p.Stock <= 5 || p.VarasDisponibles <= 5);
+
+                var dto = new DashboardResumenDto
+                {
+                    IngresosHoy = ingresosHoy,
+                    VentasHoy = ventasHoy,
+                    VentasPendientes = ventasPendientes,
+                    ProductosBajoStock = productosBajoStock
+                };
+
+                return ApiResponse<DashboardResumenDto>.SuccessResponse(dto);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<DashboardResumenDto>.ErrorResponse($"Error al obtener resumen: {ex.Message}");
+            }
+        }
     }
+
 }

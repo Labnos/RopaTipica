@@ -69,9 +69,9 @@
         <h1>Dashboard</h1>
         <div class="period-selector">
           <label>Periodo:</label>
-          <select v-model="selectedPeriod" class="period-dropdown">
+          <select v-model="selectedPeriod" class="period-dropdown" @change="reloadPeriod">
             <option value="today">Hoy</option>
-            <option value="week">Esta Semana</option>
+            <option value="week" disabled>Esta Semana</option>
             <option value="month">Este Mes</option>
             <option value="year">Este Año</option>
           </select>
@@ -82,73 +82,62 @@
       <div class="stats-grid">
         <div class="stat-card">
           <h3>INGRESOS HOY</h3>
-          <p class="stat-value primary">Q 2,175.50</p>
-          <p class="stat-subtitle">Basado en 18 ventas</p>
-          <button class="btn btn-primary btn-sm">Ver reporte →</button>
+          <p class="stat-value primary">Q {{ formatMoney(resumen.ingresosHoy) }}</p>
+          <p class="stat-subtitle">Ventas completadas hoy</p>
+          <button class="btn btn-primary btn-sm" @click="goToReportes">Ver reporte →</button>
         </div>
 
         <div class="stat-card">
           <h3>VENTAS DEL DÍA</h3>
-          <p class="stat-value">18</p>
-          <p class="stat-subtitle">12 tienda, 6, online</p>
-          <button class="btn btn-primary btn-sm">Ver reporte →</button>
+          <p class="stat-value">{{ resumen.ventasHoy }}</p>
+          <p class="stat-subtitle">Órdenes cerradas</p>
+          <button class="btn btn-primary btn-sm" @click="goToVentas">Ver ventas →</button>
         </div>
 
         <div class="stat-card">
           <h3>PEDIDOS PENDIENTES</h3>
-          <p class="stat-value">5</p>
+          <p class="stat-value">{{ resumen.ventasPendientes }}</p>
           <p class="stat-subtitle">Por pagar o entregar</p>
-          <button class="btn btn-primary btn-sm">Registrar venta •</button>
+          <button class="btn btn-primary btn-sm" @click="goToVentas">Revisar •</button>
         </div>
 
         <div class="stat-card">
           <h3>BAJO INVENTARIO</h3>
-          <p class="stat-value">9</p>
+          <p class="stat-value">{{ bajoStockCount }}</p>
           <p class="stat-subtitle">Productos a agotar</p>
-          <button class="btn btn-primary btn-sm">Ver pedidos →</button>
+          <button class="btn btn-primary btn-sm" @click="goToProductos">Ver productos →</button>
         </div>
       </div>
 
-      <h2 class="section-title">Este mes</h2>
+      <h2 class="section-title">Analítica</h2>
 
       <!-- Segunda fila: Gráficos -->
       <div class="charts-grid">
-        <!-- Gráfico de Ventas de la Semana -->
+        <!-- Ventas Mensuales (Línea) -->
         <div class="chart-card">
           <div class="chart-header">
-            <h3>📈 Ventas de la Semana</h3>
-            <select class="chart-filter">
-              <option>Sucursal: Todas</option>
-              <option>Sucursal Central</option>
-              <option>Sucursal Antigua</option>
+            <h3>📈 Ventas Mensuales ({{ currentYear }})</h3>
+            <select class="chart-filter" v-model="currentYear" @change="loadVentasMensuales">
+              <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
             </select>
           </div>
           <div class="chart-container">
-            <canvas ref="weekSalesChart"></canvas>
+            <canvas ref="ventasMensualesCanvas"></canvas>
           </div>
         </div>
 
-        <!-- Gráfico de Canales de Venta -->
+        <!-- Top Productos (Barras) -->
         <div class="chart-card">
           <div class="chart-header">
-            <h3>🕐 Canales de Venta (Hoy)</h3>
+            <h3>🏆 Top Productos Vendidos</h3>
+            <select class="chart-filter" v-model.number="topN" @change="loadTopProductos">
+              <option :value="3">Top 3</option>
+              <option :value="5">Top 5</option>
+              <option :value="10">Top 10</option>
+            </select>
           </div>
-          <div class="chart-container pie-chart">
-            <canvas ref="channelsChart"></canvas>
-            <div class="chart-legend">
-              <div class="legend-item">
-                <span class="legend-color" style="background: #1B4B7F"></span>
-                <span>Tienda Física ... 67%</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-color" style="background: #FF8C42"></span>
-                <span>Facebook ... 22%</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-color" style="background: #10B981"></span>
-                <span>WhatsApp: ... 11%</span>
-              </div>
-            </div>
+          <div class="chart-container">
+            <canvas ref="topProductosCanvas"></canvas>
           </div>
         </div>
       </div>
@@ -159,29 +148,29 @@
         <div class="info-card">
           <h3>🔔 Alertas y Notificaciones</h3>
           <ul class="notification-list">
-            <li>[Bajo Stock] Huipil Coban (2)</li>
-            <li>[Pedido] Envío para Ana G.</li>
-            <li>[Promoción] Cortes rebajados</li>
+            <li v-if="bajoStockCount > 0">[Bajo Stock] {{ bajoStockCount }} producto(s) necesitan reposición</li>
+            <li>[Info] Recuerda verificar ventas pendientes</li>
+            <li>[Info] Revisa promociones activas</li>
           </ul>
         </div>
 
-        <!-- Productos Más Vendidos -->
+        <!-- Productos Más Vendidos (Lista) -->
         <div class="info-card">
-          <h3>🔗 Productos Más Vendidos (Mes)</h3>
+          <h3>🔗 Productos Más Vendidos</h3>
           <ol class="products-list">
-            <li>Corte Totonicapán (38)</li>
-            <li>Blusa Quiché (90)</li>
-            <li>Huipil Nebaj (23)</li>
+            <li v-for="p in topProductos" :key="p.producto">
+              {{ p.producto }} ({{ p.cantidadVendida }})
+            </li>
           </ol>
         </div>
 
-        <!-- Actividad Reciente -->
+        <!-- Actividad Reciente (placeholder) -->
         <div class="info-card">
           <h3>⚡ Actividad Reciente</h3>
           <ul class="activity-list">
-            <li>› Venta #10S registrar Tienda (1)</li>
-            <li>› (Venta #99)</li>
-            <li>› Proveedor Textiles Maya (Detall)</li>
+            <li>› Nuevas ventas registradas</li>
+            <li>› Productos actualizados</li>
+            <li>› Revisión de pendientes</li>
           </ul>
         </div>
       </div>
@@ -194,18 +183,41 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import Chart from 'chart.js/auto'
+import dashboardService from '../services/dashboardService'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const toast = useToast()
 
 const selectedPeriod = ref('today')
-const weekSalesChart = ref(null)
-const channelsChart = ref(null)
 
-const userInitial = computed(() => {
-  return authStore.userName.charAt(0).toUpperCase()
+const resumen = ref({
+  ingresosHoy: 0,
+  ventasHoy: 0,
+  ventasPendientes: 0,
+  productosBajoStock: 0
 })
+
+const bajoStock = ref([])
+const bajoStockCount = computed(() => Array.isArray(bajoStock.value?.data) ? bajoStock.value.data.length : (resumen.value.productosBajoStock || 0))
+
+const topProductos = ref([])
+
+const ventasMensuales = ref([])
+
+const ventasMensualesCanvas = ref(null)
+const topProductosCanvas = ref(null)
+
+let ventasMensualesChart = null
+let topProductosChart = null
+
+const years = ref([])
+const now = new Date()
+const currentYear = ref(now.getFullYear())
+const topN = ref(5)
+
+const userInitial = computed(() => (authStore.userName || '?').charAt(0).toUpperCase())
 
 const handleLogout = async () => {
   await authStore.logout()
@@ -213,14 +225,130 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-// Inicializar gráficos (placeholder - necesitarás Chart.js)
-onMounted(() => {
-  // Aquí irían los gráficos con Chart.js
-  // Por ahora solo un placeholder
+const goToVentas = () => router.push('/ventas')
+const goToProductos = () => router.push('/productos')
+const goToReportes = () => router.push('/reportes')
+
+function formatMoney(n) {
+  const num = Number(n || 0)
+  return num.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function buildYears() {
+  const y = now.getFullYear()
+  years.value = [y - 2, y - 1, y, y + 1]
+}
+
+async function loadResumen() {
+  try {
+    const res = await dashboardService.getResumen()
+    if (res.success && res.data) {
+      // ApiResponse con { success, data: { ... } }
+      resumen.value = res.data
+    } else if (res.data?.data) {
+      // Por si tu ApiResponse viene doblemente anidada
+      resumen.value = res.data.data
+    }
+  } catch (e) {
+    console.error('Error cargando resumen', e)
+  }
+}
+
+async function loadBajoStock() {
+  try {
+    const res = await dashboardService.getBajoStock()
+    bajoStock.value = res
+  } catch (e) {
+    console.error('Error cargando bajo stock', e)
+  }
+}
+
+async function loadTopProductos() {
+  try {
+    const res = await dashboardService.getTopProductos(topN.value)
+    // Espera ApiResponse<List<TopProductoDto>>
+    const list = res.data || res?.Data || []
+    topProductos.value = list
+
+    // gráfico
+    const labels = list.map(x => x.producto || x.Producto)
+    const values = list.map(x => x.cantidadVendida ?? x.CantidadVendida ?? 0)
+
+    if (topProductosChart) topProductosChart.destroy()
+    topProductosChart = new Chart(topProductosCanvas.value.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Cantidad vendida',
+          data: values
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: true } },
+        scales: { y: { beginAtZero: true } }
+      }
+    })
+  } catch (e) {
+    console.error('Error cargando top productos', e)
+  }
+}
+
+async function loadVentasMensuales() {
+  try {
+    const res = await dashboardService.getVentasMensuales(currentYear.value)
+    const list = res.data || res?.Data || []
+    // Normalizar: [{ Mes, Total }]
+    const monthMap = new Map(list.map(x => [Number(x.Mes ?? x.mes), Number(x.Total ?? x.total)]))
+    const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    const values = Array.from({ length: 12 }, (_, i) => monthMap.get(i + 1) || 0)
+
+    if (ventasMensualesChart) ventasMensualesChart.destroy()
+    ventasMensualesChart = new Chart(ventasMensualesCanvas.value.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: `Total ventas ${currentYear.value}`,
+          data: values,
+          tension: 0.25,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: true } },
+        scales: { y: { beginAtZero: true } }
+      }
+    })
+  } catch (e) {
+    console.error('Error cargando ventas mensuales', e)
+  }
+}
+
+function reloadPeriod() {
+  // Hook del selector de período: por ahora usamos año y hoy.
+  if (selectedPeriod.value === 'today') {
+    loadResumen()
+  } else if (selectedPeriod.value === 'month' || selectedPeriod.value === 'year') {
+    loadVentasMensuales()
+  }
+}
+
+onMounted(async () => {
+  buildYears()
+  await Promise.all([
+    loadResumen(),
+    loadBajoStock(),
+    loadTopProductos(),
+    loadVentasMensuales()
+  ])
 })
 </script>
 
 <style scoped>
+/* Conservé íntegra tu hoja de estilos */
 .dashboard {
   display: flex;
   min-height: 100vh;

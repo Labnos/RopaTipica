@@ -108,7 +108,7 @@ namespace InventarioRopaTipica.Controllers
         public async Task<IActionResult> ValidarDevolucion(int detalleVentaId)
         {
             var result = await _ventaService.ValidarDevolucionAsync(detalleVentaId);
-            
+
             if (!result.Success)
             {
                 return BadRequest(new
@@ -125,6 +125,30 @@ namespace InventarioRopaTipica.Controllers
                 message = result.Message,
                 puedeDevolver = true
             });
+        }
+        
+        /// <summary>
+        /// GET: api/Ventas/Resumen
+        /// Devuelve datos estadísticos para el dashboard
+        /// </summary>
+        [HttpGet("Resumen")]
+        public async Task<IActionResult> GetResumen()
+        {
+            var result = await _ventaService.GetDashboardResumenAsync();
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// GET: api/Ventas/TopProductos?topN=5
+        /// Devuelve los productos más vendidos
+        /// </summary>
+        [HttpGet("TopProductos")]
+        public async Task<IActionResult> GetTopProductos([FromQuery] int topN = 5)
+        {
+            var result = await _ventaService.GetTopProductosAsync(topN);
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
         }
     }
 }

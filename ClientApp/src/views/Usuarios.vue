@@ -8,11 +8,22 @@
     <div class="search-bar">
       <div class="search-input-wrapper">
         <span class="search-icon">🔍</span>
-        <input v-model="searchQuery" type="text" placeholder="Buscar usuario por nombre o email..." class="search-input" />
+        <input 
+          v-model="searchQuery" 
+          type="text" 
+          placeholder="Buscar usuario por nombre o email..." 
+          class="search-input"
+          @input="filtrarUsuarios"
+        />
       </div>
     </div>
 
-    <div class="table-container">
+    <div v-if="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Cargando usuarios...</p>
+    </div>
+
+    <div v-else class="table-container">
       <table class="data-table">
         <thead>
           <tr>
@@ -21,36 +32,57 @@
             <th>ROL</th>
             <th>ESTADO</th>
             <th>ÚLTIMO ACCESO</th>
-            <th>FECHA REGISTRO</th>
             <th>ACCIONES</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="usuario in filteredUsuarios" :key="usuario.id">
+          <tr v-for="usuario in paginatedUsuarios" :key="usuario.id">
             <td><strong>{{ usuario.nombre }}</strong></td>
             <td>{{ usuario.email }}</td>
             <td><span :class="['badge', `badge-${usuario.rol.toLowerCase()}`]">{{ usuario.rol }}</span></td>
-            <td><span :class="['status', usuario.estado ? 'status-activo' : 'status-inactivo']">{{ usuario.estado ? 'Activo' : 'Inactivo' }}</span></td>
-            <td>{{ usuario.ultimoAcceso }}</td>
-            <td>{{ usuario.fechaRegistro }}</td>
+            <td>
+              <span :class="['status', usuario.estado ? 'status-activo' : 'status-inactivo']">
+                {{ usuario.estado ? 'Activo' : 'Inactivo' }}
+              </span>
+            </td>
+            <td>{{ formatearFecha(usuario.ultimoAcceso) }}</td>
             <td>
               <button @click="openModal(usuario)" class="btn-icon" title="Editar">✏️</button>
-              <button @click="toggleEstado(usuario)" class="btn-icon" :title="usuario.estado ? 'Desactivar' : 'Activar'">{{ usuario.estado ? '🔒' : '🔓' }}</button>
+              <button @click="toggleEstado(usuario)" class="btn-icon" :title="usuario.estado ? 'Desactivar' : 'Activar'">
+                {{ usuario.estado ? '🔒' : '🔓' }}
+              </button>
               <button @click="deleteUsuario(usuario.id)" class="btn-icon" title="Eliminar">🗑️</button>
             </td>
           </tr>
         </tbody>
       </table>
-    </div>
 
-    <div class="pagination-container">
-      <span class="more-items">... más usuarios</span>
-      <div class="pagination-info">
-        <span>Páginas:</span>
-        <button v-for="page in 3" :key="page" :class="['pagination-btn', { active: page === 1 }]">{{ page }}</button>
+      <div v-if="filteredUsuarios.length === 0" class="no-data">
+        <p>No se encontraron usuarios</p>
       </div>
     </div>
 
+    <div v-if="totalPages > 1" class="pagination-container">
+      <div class="pagination-info">
+        <button 
+          @click="previousPage" 
+          :disabled="currentPage === 1"
+          class="pagination-btn"
+        >
+          ❮ Anterior
+        </button>
+        <span>Página {{ currentPage }} de {{ totalPages }}</span>
+        <button 
+          @click="nextPage" 
+          :disabled="currentPage === totalPages"
+          class="pagination-btn"
+        >
+          Siguiente ❯
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal-card">
         <div class="modal-header">
@@ -66,7 +98,7 @@
             <label>Email*</label>
             <input v-model="formData.email" type="email" required />
           </div>
-          <div class="form-group" v-if="!isEditing">
+          <div v-if="!isEditing" class="form-group">
             <label>Contraseña*</label>
             <input v-model="formData.password" type="password" required minlength="8" />
           </div>
@@ -78,15 +110,18 @@
               <option value="Encargado">Encargado</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>
-              <input v-model="formData.estado" type="checkbox" />
-              Usuario activo
-            </label>
+          
+          <div v-if="formError" class="error-message">
+            {{ formError }}
           </div>
+
           <div class="modal-actions">
-            <button type="submit" class="btn btn-primary">{{ isEditing ? 'Actualizar' : 'Guardar Usuario' }}</button>
-            <button type="button" @click="closeModal" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary" :disabled="loadingForm">
+              {{ loadingForm ? 'Guardando...' : (isEditing ? 'Actualizar' : 'Guardar Usuario') }}
+            </button>
+            <button type="button" @click="closeModal" class="btn btn-secondary" :disabled="loadingForm">
+              Cancelar
+            </button>
           </div>
         </form>
       </div>
@@ -95,13 +130,22 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
+import api from '../services/api'
 
 const toast = useToast()
-const searchQuery = ref('')
+
+const usuarios = ref([])
+const filteredUsuarios = ref([])
+const loading = ref(false)
+const loadingForm = ref(false)
 const showModal = ref(false)
 const isEditing = ref(false)
+const searchQuery = ref('')
+const currentPage = ref(1)
+const itemsPerPage = 10
+const formError = ref('')
 
 const formData = ref({
   id: null,
@@ -112,23 +156,48 @@ const formData = ref({
   estado: true
 })
 
-const usuarios = ref([
-  { id: 1, nombre: 'Administrador', email: 'admin@ropatipica.gt', rol: 'Administrador', estado: true, ultimoAcceso: '04/11/2025 11:30', fechaRegistro: '01/01/2025' },
-  { id: 2, nombre: 'María López', email: 'maria.lopez@ropatipica.gt', rol: 'Vendedor', estado: true, ultimoAcceso: '04/11/2025 10:15', fechaRegistro: '15/01/2025' },
-  { id: 3, nombre: 'Carlos Mendoza', email: 'carlos.mendoza@ropatipica.gt', rol: 'Encargado', estado: true, ultimoAcceso: '03/11/2025 16:45', fechaRegistro: '20/01/2025' },
-  { id: 4, nombre: 'Ana García', email: 'ana.garcia@ropatipica.gt', rol: 'Vendedor', estado: false, ultimoAcceso: '01/11/2025 09:00', fechaRegistro: '10/02/2025' },
-  { id: 5, nombre: 'Pedro Ramírez', email: 'pedro.ramirez@ropatipica.gt', rol: 'Vendedor', estado: true, ultimoAcceso: '04/11/2025 08:30', fechaRegistro: '15/02/2025' }
-])
+const totalPages = computed(() => Math.ceil(filteredUsuarios.value.length / itemsPerPage))
 
-const filteredUsuarios = computed(() => {
-  if (!searchQuery.value) return usuarios.value
-  return usuarios.value.filter(u => 
-    u.nombre.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
+const paginatedUsuarios = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return filteredUsuarios.value.slice(start, end)
 })
 
+const cargarUsuarios = async () => {
+  loading.value = true
+  try {
+    const response = await api.get('/Users')
+    usuarios.value = response.data.data || response.data
+    filtrarUsuarios()
+  } catch (error) {
+    console.error('Error al cargar usuarios:', error)
+    toast.error('Error al cargar usuarios')
+  } finally {
+    loading.value = false
+  }
+}
+
+const filtrarUsuarios = () => {
+  if (!searchQuery.value) {
+    filteredUsuarios.value = usuarios.value
+  } else {
+    const query = searchQuery.value.toLowerCase()
+    filteredUsuarios.value = usuarios.value.filter(u =>
+      u.nombre.toLowerCase().includes(query) ||
+      u.email.toLowerCase().includes(query)
+    )
+  }
+  currentPage.value = 1
+}
+
+const formatearFecha = (fecha) => {
+  if (!fecha) return 'N/A'
+  return new Date(fecha).toLocaleDateString('es-GT')
+}
+
 const openModal = (usuario = null) => {
+  formError.value = ''
   if (usuario) {
     isEditing.value = true
     formData.value = { ...usuario, password: '' }
@@ -141,38 +210,94 @@ const openModal = (usuario = null) => {
 
 const closeModal = () => {
   showModal.value = false
+  formData.value = { id: null, nombre: '', email: '', password: '', rol: 'Vendedor', estado: true }
 }
 
-const saveUsuario = () => {
-  if (isEditing.value) {
-    const index = usuarios.value.findIndex(u => u.id === formData.value.id)
-    if (index !== -1) {
-      usuarios.value[index] = { ...formData.value, ultimoAcceso: usuarios.value[index].ultimoAcceso, fechaRegistro: usuarios.value[index].fechaRegistro }
-      toast.success('Usuario actualizado')
+const saveUsuario = async () => {
+  loadingForm.value = true
+  formError.value = ''
+
+  try {
+    if (isEditing.value) {
+      const response = await api.put(`/Users/${formData.value.id}`, {
+        nombre: formData.value.nombre,
+        email: formData.value.email,
+        rol: formData.value.rol,
+        estado: formData.value.estado
+      })
+      
+      if (response.data.success) {
+        toast.success('Usuario actualizado exitosamente')
+        cargarUsuarios()
+        closeModal()
+      }
+    } else {
+      const response = await api.post('/Users', {
+        nombre: formData.value.nombre,
+        email: formData.value.email,
+        password: formData.value.password,
+        rol: formData.value.rol
+      })
+      
+      if (response.data.success) {
+        toast.success('Usuario creado exitosamente')
+        cargarUsuarios()
+        closeModal()
+      }
     }
-  } else {
-    usuarios.value.push({
-      ...formData.value,
-      id: usuarios.value.length + 1,
-      ultimoAcceso: 'N/A',
-      fechaRegistro: new Date().toLocaleDateString('es-GT')
+  } catch (error) {
+    console.error('Error al guardar usuario:', error)
+    formError.value = error.response?.data?.message || 'Error al guardar usuario'
+    toast.error(formError.value)
+  } finally {
+    loadingForm.value = false
+  }
+}
+
+const toggleEstado = async (usuario) => {
+  try {
+    const response = await api.put(`/Users/${usuario.id}`, {
+      estado: !usuario.estado
     })
-    toast.success('Usuario creado')
-  }
-  closeModal()
-}
-
-const toggleEstado = (usuario) => {
-  usuario.estado = !usuario.estado
-  toast.success(`Usuario ${usuario.estado ? 'activado' : 'desactivado'}`)
-}
-
-const deleteUsuario = (id) => {
-  if (confirm('¿Eliminar usuario?')) {
-    usuarios.value = usuarios.value.filter(u => u.id !== id)
-    toast.success('Usuario eliminado')
+    
+    if (response.data.success) {
+      usuario.estado = !usuario.estado
+      toast.success(`Usuario ${usuario.estado ? 'activado' : 'desactivado'}`)
+    }
+  } catch (error) {
+    console.error('Error al cambiar estado:', error)
+    toast.error('Error al cambiar estado del usuario')
   }
 }
+
+const deleteUsuario = async (id) => {
+  if (!confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
+    return
+  }
+
+  try {
+    const response = await api.delete(`/Users/${id}`)
+    if (response.data.success) {
+      toast.success('Usuario eliminado exitosamente')
+      cargarUsuarios()
+    }
+  } catch (error) {
+    console.error('Error al eliminar usuario:', error)
+    toast.error('Error al eliminar usuario')
+  }
+}
+
+const previousPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+onMounted(() => {
+  cargarUsuarios()
+})
 </script>
 
 <style scoped>
@@ -224,6 +349,27 @@ const deleteUsuario = (id) => {
   background: white;
 }
 
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .table-container {
   background: white;
   border: 2px solid var(--color-border);
@@ -260,7 +406,7 @@ const deleteUsuario = (id) => {
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
 }
 
 .badge-administrador {
@@ -282,7 +428,7 @@ const deleteUsuario = (id) => {
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
 }
 
 .status-activo {
@@ -301,17 +447,24 @@ const deleteUsuario = (id) => {
   cursor: pointer;
   padding: 4px 8px;
   font-size: 18px;
+  margin: 0 2px;
+}
+
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-muted);
 }
 
 .pagination-container {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .pagination-info {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -321,11 +474,17 @@ const deleteUsuario = (id) => {
   background: white;
   border-radius: var(--border-radius-md);
   cursor: pointer;
+  font-weight: var(--font-weight-medium);
 }
 
-.pagination-btn.active {
+.pagination-btn:hover:not(:disabled) {
   background: var(--color-primary);
   color: white;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-overlay {
@@ -371,6 +530,7 @@ const deleteUsuario = (id) => {
   border: none;
   font-size: 28px;
   cursor: pointer;
+  color: var(--color-text-muted);
 }
 
 .modal-form {
@@ -387,9 +547,7 @@ const deleteUsuario = (id) => {
   font-weight: var(--font-weight-medium);
 }
 
-.form-group input[type="text"],
-.form-group input[type="email"],
-.form-group input[type="password"],
+.form-group input,
 .form-group select {
   width: 100%;
   padding: 12px 16px;
@@ -398,8 +556,20 @@ const deleteUsuario = (id) => {
   font-size: 15px;
 }
 
-.form-group input[type="checkbox"] {
-  margin-right: 8px;
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.error-message {
+  background-color: var(--color-error-light);
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  font-size: 14px;
+  margin-bottom: 16px;
+  border-left: 4px solid var(--color-error);
 }
 
 .modal-actions {

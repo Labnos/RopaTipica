@@ -110,81 +110,45 @@ app.MapControllerRoute(
     pattern: "api/{controller}/{action}/{id?}"
 );
 
-// ====================== SPA (VITE) ======================
-app.UseSpa(spa =>
+// ====================== SPA (solo para navegador) ======================
+app.UseWhen(context => !context.Request.Path.StartsWithSegments("/api"), spaApp =>
 {
-    spa.Options.SourcePath = "ClientApp";
-
-    if (app.Environment.IsDevelopment())
+    spaApp.UseSpa(spa =>
     {
-        var clientAppPath = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp");
-        var npmPath = "npm";
+        spa.Options.SourcePath = "ClientApp";
 
-        // Solo ejecuta npm si está instalado en el sistema
-        bool npmExists = System.IO.File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "npm.cmd"))
-                      || System.IO.File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "npm.cmd"))
-                      || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PATH")?.Split(';').FirstOrDefault(p => p.Contains("nodejs")));
-
-        if (npmExists)
+        if (app.Environment.IsDevelopment())
         {
             try
             {
-                Console.WriteLine("🚀 Iniciando Vite dev server...");
-
-                var viteProcess = new System.Diagnostics.Process
+                using var client = new HttpClient();
+                var response = client.GetAsync("http://localhost:5173").Result;
+                if (response.IsSuccessStatusCode)
                 {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = npmPath,
-                        Arguments = "run dev",
-                        WorkingDirectory = clientAppPath,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-
-                viteProcess.OutputDataReceived += (sender, args) =>
+                    Console.WriteLine("🚀 Proxy activo hacia Vite (localhost:5173)");
+                    spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
+                }
+                else
                 {
-                    if (!string.IsNullOrEmpty(args.Data))
-                        Console.WriteLine($"[Vite] {args.Data}");
-                };
-
-                viteProcess.ErrorDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrEmpty(args.Data))
-                        Console.WriteLine($"❌ [Vite Error] {args.Data}");
-                };
-
-                viteProcess.Start();
-                viteProcess.BeginOutputReadLine();
-                viteProcess.BeginErrorReadLine();
+                    Console.WriteLine("⚠️ Vite no está corriendo. Solo se sirve backend.");
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"⚠️ No se pudo iniciar el servidor de Vite automáticamente: {ex.Message}");
+                Console.WriteLine("⚠️ No se pudo conectar con Vite. Solo se sirve backend.");
             }
         }
         else
         {
-            Console.WriteLine("⚠️ npm no está instalado o no se encuentra en PATH. Ejecuta manualmente 'npm run dev' en la carpeta ClientApp.");
-        }
-
-        // Proxy hacia el servidor de desarrollo de Vite
-        spa.UseProxyToSpaDevelopmentServer("http://localhost:5173");
-    }
-    else
-    {
-        // En producción, sirve los archivos compilados desde wwwroot
-        spa.Options.DefaultPageStaticFileOptions = new StaticFileOptions
-        {
-            OnPrepareResponse = ctx =>
+            spa.Options.DefaultPageStaticFileOptions = new StaticFileOptions
             {
-                ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store");
-            }
-        };
-    }
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store");
+                }
+            };
+        }
+    });
 });
 
 // ====================== EJECUCIÓN ======================

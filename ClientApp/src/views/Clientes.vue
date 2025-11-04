@@ -5,23 +5,35 @@
       <button @click="openModal()" class="btn btn-primary">+ Añadir Cliente</button>
     </div>
 
+    <!-- Búsqueda -->
     <div class="search-bar">
       <div class="search-input-wrapper">
         <span class="search-icon">🔍</span>
-        <input v-model="searchQuery" type="text" placeholder="Buscar cliente por nombre o contacto..." class="search-input" />
+        <input 
+          v-model="searchQuery" 
+          type="text" 
+          placeholder="Buscar cliente por nombre o contacto..." 
+          class="search-input"
+          @input="filtrarClientes"
+        />
       </div>
     </div>
 
-    <div class="table-container">
+    <!-- Estado de carga -->
+    <div v-if="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Cargando clientes...</p>
+    </div>
+
+    <!-- Tabla de clientes -->
+    <div v-else class="table-container">
       <table class="data-table">
         <thead>
           <tr>
             <th>NOMBRE COMPLETO</th>
             <th>CONTACTO</th>
             <th>UBICACIÓN</th>
-            <th>ÚLTIMA COMPRA</th>
-            <th>COMPRAS</th>
-            <th>TOTACIONES</th>
+            <th>EMAIL</th>
             <th>ACCIONES</th>
           </tr>
         </thead>
@@ -30,54 +42,78 @@
             <td>{{ cliente.nombre }}</td>
             <td>{{ cliente.telefono }}</td>
             <td>{{ cliente.direccion }}</td>
-            <td>{{ cliente.ultimaCompra }}</td>
-            <td>{{ cliente.compras }}</td>
+            <td>{{ cliente.email }}</td>
             <td>
-              <button class="btn-icon">🔧 {{ cliente.totaciones }}</button>
-            </td>
-            <td>
-              <button @click="openModal(cliente)" class="btn-action">✏️ {{ cliente.acciones }}</button>
-              <button @click="deleteCliente(cliente.id)" class="btn-action">✓ 🗑️</button>
+              <button @click="openModal(cliente)" class="btn-action" title="Editar">✏️</button>
+              <button @click="deleteCliente(cliente.id)" class="btn-action" title="Eliminar">🗑️</button>
             </td>
           </tr>
         </tbody>
       </table>
-    </div>
 
-    <div class="pagination-container">
-      <span class="more-items">... más clientes</span>
-      <div class="pagination-info">
-        <span>Páginas:</span>
-        <button v-for="page in 3" :key="page" :class="['pagination-btn', { active: page === currentPage }]">{{ page }}</button>
+      <!-- Sin resultados -->
+      <div v-if="filteredClientes.length === 0" class="no-data">
+        <p>No se encontraron clientes</p>
       </div>
     </div>
 
+    <!-- Paginación -->
+    <div v-if="totalPages > 1" class="pagination-container">
+      <div class="pagination-info">
+        <button 
+          @click="previousPage" 
+          :disabled="currentPage === 1"
+          class="pagination-btn"
+        >
+          ❮ Anterior
+        </button>
+        <span>Página {{ currentPage }} de {{ totalPages }}</span>
+        <button 
+          @click="nextPage" 
+          :disabled="currentPage === totalPages"
+          class="pagination-btn"
+        >
+          Siguiente ❯
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal-card">
         <div class="modal-header">
-          <h2>Registrar Nuevo Cliente</h2>
+          <h2>{{ isEditing ? 'Editar Cliente' : 'Registrar Nuevo Cliente' }}</h2>
           <button @click="closeModal" class="btn-close">✕</button>
         </div>
         <form @submit.prevent="saveCliente" class="modal-form">
           <div class="form-group">
             <label>Nombre Completo*</label>
-            <input v-model="formData.nombre" type="text" required />
+            <input v-model="formData.nombre" type="text" required placeholder="Ej: María González" />
           </div>
           <div class="form-group">
-            <label>Número de Contacto</label>
-            <input v-model="formData.telefono" type="tel" />
+            <label>Teléfono*</label>
+            <input v-model="formData.telefono" type="tel" required placeholder="Ej: 555-1234" />
           </div>
           <div class="form-group">
-            <label>Ubicación (Dirección)</label>
-            <input v-model="formData.direccion" type="text" />
+            <label>Email</label>
+            <input v-model="formData.email" type="email" placeholder="cliente@ejemplo.com" />
           </div>
           <div class="form-group">
-            <label>Preferencias y Notas</label>
-            <textarea v-model="formData.notas" rows="3"></textarea>
+            <label>Dirección</label>
+            <input v-model="formData.direccion" type="text" placeholder="Ej: Zona 1, Guatemala" />
           </div>
+          
+          <div v-if="formError" class="error-message">
+            {{ formError }}
+          </div>
+
           <div class="modal-actions">
-            <button type="submit" class="btn btn-primary">Guardar Cliente</button>
-            <button type="button" @click="closeModal" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary" :disabled="loadingForm">
+              {{ loadingForm ? 'Guardando...' : (isEditing ? 'Actualizar' : 'Guardar Cliente') }}
+            </button>
+            <button type="button" @click="closeModal" class="btn btn-secondary" :disabled="loadingForm">
+              Cancelar
+            </button>
           </div>
         </form>
       </div>
@@ -86,59 +122,158 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
+import api from '../services/api'
 
 const toast = useToast()
-const searchQuery = ref('')
-const showModal = ref(false)
-const currentPage = ref(1)
 
+// Estado
+const clientes = ref([])
+const filteredClientes = ref([])
+const loading = ref(false)
+const loadingForm = ref(false)
+const showModal = ref(false)
+const isEditing = ref(false)
+const searchQuery = ref('')
+const currentPage = ref(1)
+const itemsPerPage = 10
+const formError = ref('')
+
+// Formulario
 const formData = ref({
+  id: null,
   nombre: '',
   telefono: '',
-  direccion: '',
-  notas: ''
+  email: '',
+  direccion: ''
 })
 
-const clientes = ref([
-  { id: 1, nombre: 'María González', telefono: '555-5551', direccion: 'Zona 1', ultimaCompra: '15-11-2024', compras: '23', totaciones: '8', acciones: '8' },
-  { id: 2, nombre: 'Chimaltenango', telefono: '555-5555', direccion: 'Chimaltenango', ultimaCompra: '10-11-2024', compras: '15', totaciones: '8', acciones: '8' },
-  { id: 3, nombre: 'Ana Pérez', telefono: '555-5567', direccion: 'Antigua', ultimaCompra: '08-11-2024', compras: '12', totaciones: '8', acciones: '8' },
-  { id: 4, nombre: 'Carmen Hern..', telefono: '555-5567', direccion: 'Guatemala', ultimaCompra: '05-11-2024', compras: '8', totaciones: '8', acciones: '8' },
-  { id: 5, nombre: 'Carmen hendez', telefono: '555-5855', direccion: 'Mixco', ultimaCompra: '01-11-2024', compras: '5', totaciones: '0-20 3 €', acciones: '8' }
-])
+// Computed
+const totalPages = computed(() => Math.ceil(filteredClientes.value.length / itemsPerPage))
 
-const filteredClientes = computed(() => {
-  if (!searchQuery.value) return clientes.value
-  return clientes.value.filter(c => c.nombre.toLowerCase().includes(searchQuery.value.toLowerCase()) || c.telefono.includes(searchQuery.value))
+const paginatedClientes = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return filteredClientes.value.slice(start, end)
 })
+
+// Métodos
+const cargarClientes = async () => {
+  loading.value = true
+  try {
+    const response = await api.get('/Clientes')
+    clientes.value = response.data.data || response.data
+    filtrarClientes()
+  } catch (error) {
+    console.error('Error al cargar clientes:', error)
+    toast.error('Error al cargar clientes')
+  } finally {
+    loading.value = false
+  }
+}
+
+const filtrarClientes = () => {
+  if (!searchQuery.value) {
+    filteredClientes.value = clientes.value
+  } else {
+    const query = searchQuery.value.toLowerCase()
+    filteredClientes.value = clientes.value.filter(c =>
+      c.nombre.toLowerCase().includes(query) ||
+      c.telefono.includes(query) ||
+      (c.email && c.email.toLowerCase().includes(query))
+    )
+  }
+  currentPage.value = 1
+}
 
 const openModal = (cliente = null) => {
+  formError.value = ''
   if (cliente) {
+    isEditing.value = true
     formData.value = { ...cliente }
   } else {
-    formData.value = { nombre: '', telefono: '', direccion: '', notas: '' }
+    isEditing.value = false
+    formData.value = { id: null, nombre: '', telefono: '', email: '', direccion: '' }
   }
   showModal.value = true
 }
 
 const closeModal = () => {
   showModal.value = false
+  formData.value = { id: null, nombre: '', telefono: '', email: '', direccion: '' }
 }
 
-const saveCliente = () => {
-  clientes.value.push({ ...formData.value, id: clientes.value.length + 1, ultimaCompra: 'N/A', compras: '0', totaciones: '0', acciones: '0' })
-  toast.success('Cliente guardado')
-  closeModal()
-}
-
-const deleteCliente = (id) => {
-  if (confirm('¿Eliminar cliente?')) {
-    clientes.value = clientes.value.filter(c => c.id !== id)
-    toast.success('Cliente eliminado')
+const saveCliente = async () => {
+  loadingForm.value = true
+  formError.value = ''
+  
+  try {
+    if (isEditing.value) {
+      const response = await api.put(`/Clientes/${formData.value.id}`, {
+        nombre: formData.value.nombre,
+        telefono: formData.value.telefono,
+        email: formData.value.email,
+        direccion: formData.value.direccion
+      })
+      
+      if (response.data.success) {
+        toast.success('Cliente actualizado exitosamente')
+        cargarClientes()
+        closeModal()
+      }
+    } else {
+      const response = await api.post('/Clientes', {
+        nombre: formData.value.nombre,
+        telefono: formData.value.telefono,
+        email: formData.value.email,
+        direccion: formData.value.direccion
+      })
+      
+      if (response.data.success) {
+        toast.success('Cliente creado exitosamente')
+        cargarClientes()
+        closeModal()
+      }
+    }
+  } catch (error) {
+    console.error('Error al guardar cliente:', error)
+    formError.value = error.response?.data?.message || 'Error al guardar cliente'
+    toast.error(formError.value)
+  } finally {
+    loadingForm.value = false
   }
 }
+
+const deleteCliente = async (id) => {
+  if (!confirm('¿Estás seguro de que deseas eliminar este cliente?')) {
+    return
+  }
+  
+  try {
+    const response = await api.delete(`/Clientes/${id}`)
+    if (response.data.success) {
+      toast.success('Cliente eliminado exitosamente')
+      cargarClientes()
+    }
+  } catch (error) {
+    console.error('Error al eliminar cliente:', error)
+    toast.error('Error al eliminar cliente')
+  }
+}
+
+const previousPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+// Lifecycle
+onMounted(() => {
+  cargarClientes()
+})
 </script>
 
 <style scoped>
@@ -190,6 +325,27 @@ const deleteCliente = (id) => {
   background: white;
 }
 
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .table-container {
   background: white;
   border: 2px solid var(--color-border);
@@ -222,25 +378,30 @@ const deleteCliente = (id) => {
   border-bottom: 1px solid var(--color-background);
 }
 
-.btn-icon,
 .btn-action {
   background: transparent;
   border: none;
   cursor: pointer;
   padding: 4px 8px;
   margin: 0 4px;
-  font-size: 14px;
+  font-size: 16px;
+}
+
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-muted);
 }
 
 .pagination-container {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .pagination-info {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -250,12 +411,19 @@ const deleteCliente = (id) => {
   background: white;
   border-radius: var(--border-radius-md);
   cursor: pointer;
+  font-weight: var(--font-weight-medium);
+  transition: all 0.3s;
 }
 
-.pagination-btn.active {
+.pagination-btn:hover:not(:disabled) {
   background: var(--color-primary);
   color: white;
   border-color: var(--color-primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-overlay {
@@ -301,6 +469,7 @@ const deleteCliente = (id) => {
   border: none;
   font-size: 28px;
   cursor: pointer;
+  color: var(--color-text-muted);
 }
 
 .modal-form {
@@ -317,13 +486,27 @@ const deleteCliente = (id) => {
   font-weight: var(--font-weight-medium);
 }
 
-.form-group input,
-.form-group textarea {
+.form-group input {
   width: 100%;
   padding: 12px 16px;
   border: 2px solid var(--color-border);
   border-radius: var(--border-radius-md);
   font-size: 15px;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.error-message {
+  background-color: var(--color-error-light);
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  font-size: 14px;
+  margin-bottom: 16px;
+  border-left: 4px solid var(--color-error);
 }
 
 .modal-actions {
