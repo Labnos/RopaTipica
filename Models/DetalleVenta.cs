@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace InventarioRopaTipica.Models
 {
-    [Table("DetalleVentas")]
+    [Table("detalleventas")]
     public class DetalleVenta
     {
         [Key]

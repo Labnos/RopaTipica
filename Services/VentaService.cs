@@ -308,41 +308,42 @@ namespace InventarioRopaTipica.Services
         // MÉTODOS ADICIONALES DASHBOARD
         // ===========================
 
-        public async Task<ApiResponse<List<TopProductoDto>>> GetTopProductosAsync(int topN = 5)
+       public async Task<ApiResponse<List<TopProductoDto>>> GetTopProductosAsync(int topN)
         {
             try
             {
-                // 1. FIX: Aggregate quantities by ProductId (safe for EF Core translation)
-                var topAggregated = await _context.DetalleVentas
-                    .GroupBy(dv => dv.ProductoId)
-                    .Select(g => new 
-                    {
-                        ProductoId = g.Key,
-                        CantidadVendida = g.Sum(x => x.Cantidad)
+                var topProductos = await _context.DetalleVentas
+                    
+                    // 1. FILTRO (Arregla el error 400 de NULL)
+                    .Where(dv => dv.Producto != null && dv.Producto.Nombre != null) 
+                    
+                    // 2. GROUP BY (Agrupamos por ID y Nombre)
+                    .GroupBy(dv => new { 
+                        dv.Producto.Id, 
+                        dv.Producto.Nombre 
                     })
+                    
+                    // 3. SELECT (Mapeamos a TU DTO)
+                    .Select(g => new TopProductoDto 
+                    {
+                        ProductoId = g.Key.Id,
+                        ProductoNombre = g.Key.Nombre,
+                        CantidadVendida = g.Sum(dv => dv.Cantidad),
+                        TotalGenerado = g.Sum(dv => dv.Cantidad * dv.PrecioUnitario) 
+                    })
+                    
                     .OrderByDescending(x => x.CantidadVendida)
                     .Take(topN)
-                    .ToListAsync(); // Materialize the top IDs and counts
+                    .ToListAsync();
 
-                // 2. Fetch the corresponding Product Names (assuming ProductoId is not null)
-                var productIds = topAggregated.Select(x => x.ProductoId).ToList();
-                var productsMap = await _context.Productos
-                    .Where(p => productIds.Contains(p.Id))
-                    .ToDictionaryAsync(p => p.Id, p => p.Nombre);
-                
-                // 3. Map the aggregated data to the final DTO in memory
-                var result = topAggregated.Select(x => new TopProductoDto
-                {
-                    // Use GetValueOrDefault for safe lookup
-                    Producto = productsMap.GetValueOrDefault(x.ProductoId, "Producto Desconocido"),
-                    CantidadVendida = x.CantidadVendida
-                }).ToList();
-
-                return ApiResponse<List<TopProductoDto>>.SuccessResponse(result);
+                // 4. ✅ CORRECCIÓN DE CONSTRUCTOR (Arregla error CS1729)
+                // Usamos tu método estático SuccessResponse
+                return ApiResponse<List<TopProductoDto>>.SuccessResponse(topProductos, "Top productos obtenidos");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener productos más vendidos");
+                // 5. ✅ CORRECCIÓN DE CONSTRUCTOR (Arregla error CS1729)
+                // Usamos tu método estático ErrorResponse
                 return ApiResponse<List<TopProductoDto>>.ErrorResponse($"Error al obtener top productos: {ex.Message}");
             }
         }
