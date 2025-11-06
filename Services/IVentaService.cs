@@ -19,9 +19,12 @@ namespace InventarioRopaTipica.Services
     }
 
     // DTO adicional para reportes y dashboard
-    public class TopProductoDto
+      public class TopProductoDto
     {
-        public string Producto { get; set; }
+        public int ProductoId { get; set; }
+        public string ProductoNombre { get; set; }
         public int CantidadVendida { get; set; }
+        public decimal TotalGenerado { get; set; }
     }
+
 }

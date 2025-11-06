@@ -22,10 +22,10 @@ namespace InventarioRopaTipica.Services
                     .Select(c => new ClienteDto
                     {
                         Id = c.Id,
-                        Nombre = c.Nombre,
-                        Telefono = c.Telefono,
-                        Direccion = c.Direccion,
-                        Email = c.Email,
+                        Nombre = c.Nombre ?? string.Empty,           // ✅ Null coalescing
+                        Telefono = c.Telefono ?? string.Empty,       // ✅ Null coalescing
+                        Direccion = c.Direccion ?? string.Empty,     // ✅ Null coalescing
+                        Email = c.Email ?? string.Empty,             // ✅ Null coalescing
                         CreadoEn = c.CreadoEn
                     })
                     .OrderBy(c => c.Nombre)
@@ -48,10 +48,10 @@ namespace InventarioRopaTipica.Services
                     .Select(c => new ClienteDto
                     {
                         Id = c.Id,
-                        Nombre = c.Nombre,
-                        Telefono = c.Telefono,
-                        Direccion = c.Direccion,
-                        Email = c.Email,
+                        Nombre = c.Nombre ?? string.Empty,           // ✅ Null coalescing
+                        Telefono = c.Telefono ?? string.Empty,       // ✅ Null coalescing
+                        Direccion = c.Direccion ?? string.Empty,     // ✅ Null coalescing
+                        Email = c.Email ?? string.Empty,             // ✅ Null coalescing
                         CreadoEn = c.CreadoEn
                     })
                     .FirstOrDefaultAsync();
@@ -74,9 +74,9 @@ namespace InventarioRopaTipica.Services
                 var cliente = new Cliente
                 {
                     Nombre = createClienteDto.Nombre,
-                    Telefono = createClienteDto.Telefono,
-                    Direccion = createClienteDto.Direccion,
-                    Email = createClienteDto.Email,
+                    Telefono = createClienteDto.Telefono ?? string.Empty,     // ✅ Default to empty
+                    Direccion = createClienteDto.Direccion ?? string.Empty,   // ✅ Default to empty
+                    Email = createClienteDto.Email ?? string.Empty,           // ✅ Default to empty
                     CreadoEn = DateTime.Now
                 };
 
@@ -86,10 +86,10 @@ namespace InventarioRopaTipica.Services
                 var clienteDto = new ClienteDto
                 {
                     Id = cliente.Id,
-                    Nombre = cliente.Nombre,
-                    Telefono = cliente.Telefono,
-                    Direccion = cliente.Direccion,
-                    Email = cliente.Email,
+                    Nombre = cliente.Nombre ?? string.Empty,
+                    Telefono = cliente.Telefono ?? string.Empty,
+                    Direccion = cliente.Direccion ?? string.Empty,
+                    Email = cliente.Email ?? string.Empty,
                     CreadoEn = cliente.CreadoEn
                 };
 
@@ -110,19 +110,19 @@ namespace InventarioRopaTipica.Services
                     return ApiResponse<ClienteDto>.ErrorResponse("Cliente no encontrado");
 
                 cliente.Nombre = updateClienteDto.Nombre;
-                cliente.Telefono = updateClienteDto.Telefono;
-                cliente.Direccion = updateClienteDto.Direccion;
-                cliente.Email = updateClienteDto.Email;
+                cliente.Telefono = updateClienteDto.Telefono ?? string.Empty;     // ✅ Default to empty
+                cliente.Direccion = updateClienteDto.Direccion ?? string.Empty;   // ✅ Default to empty
+                cliente.Email = updateClienteDto.Email ?? string.Empty;           // ✅ Default to empty
 
                 await _context.SaveChangesAsync();
 
                 var clienteDto = new ClienteDto
                 {
                     Id = cliente.Id,
-                    Nombre = cliente.Nombre,
-                    Telefono = cliente.Telefono,
-                    Direccion = cliente.Direccion,
-                    Email = cliente.Email,
+                    Nombre = cliente.Nombre ?? string.Empty,
+                    Telefono = cliente.Telefono ?? string.Empty,
+                    Direccion = cliente.Direccion ?? string.Empty,
+                    Email = cliente.Email ?? string.Empty,
                     CreadoEn = cliente.CreadoEn
                 };
 
