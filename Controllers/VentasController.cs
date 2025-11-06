@@ -150,5 +150,12 @@ namespace InventarioRopaTipica.Controllers
             if (!result.Success) return BadRequest(result);
             return Ok(result);
         }
+
+        [HttpGet("VentasMensuales")]
+        public async Task<IActionResult> GetVentasMensuales([FromQuery] int year)
+        {
+            var result = await _ventaService.GetVentasMensualesAsync(year);
+            return Ok(result);
+        }
     }
 }

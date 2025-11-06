@@ -77,6 +77,8 @@ builder.Services.AddScoped<InventarioRopaTipica.Services.IProductoService, Inven
 builder.Services.AddScoped<InventarioRopaTipica.Services.IVentaService, InventarioRopaTipica.Services.VentaService>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IClienteService, InventarioRopaTipica.Services.ClienteService>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IProveedorService, InventarioRopaTipica.Services.ProveedorService>();
+builder.Services.AddScoped<InventarioRopaTipica.Services.IPromocionService, InventarioRopaTipica.Services.PromocionService>();
+
 
 // ---------- Archivos estáticos SPA ----------
 builder.Services.AddSpaStaticFiles(configuration =>

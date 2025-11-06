@@ -108,18 +108,7 @@ namespace InventarioRopaTipica.Data
             });
 
             // Configuración de Promocion
-            modelBuilder.Entity<Promocion>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.FechaInicio, e.FechaFin });
-                entity.Property(e => e.Activo).HasDefaultValue(true);
-
-                // Relación con Producto
-                entity.HasOne(pr => pr.Producto)
-                    .WithMany(p => p.Promociones)
-                    .HasForeignKey(pr => pr.ProductoId)
-                    .OnDelete(DeleteBehavior.Restrict);
-            });
+            modelBuilder.Entity<Promocion>().HasKey(p => p.Id);
 
             // Configuración de Envio
             modelBuilder.Entity<Envio>(entity =>

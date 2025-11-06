@@ -1,22 +1,27 @@
-runtime: aspnetcore
+# Usa 'custom' para indicarle a App Engine que debe construir
+# la aplicación usando el 'dockerfile' en este directorio.
+runtime: custom
 env: flex
 
-runtime_config:
-  operating_system: ubuntu22
-
+# Las variables de entorno para tu aplicación .NET
 env_variables:
   ASPNETCORE_ENVIRONMENT: 'Production'
 
+# Configuración de escalado manual
 manual_scaling:
   instances: 1
 
+# Definición de recursos para la instancia
 resources:
   cpu: 1
   memory_gb: 2
   disk_size_gb: 10
 
+# Habilita la afinidad de sesión (útil para apps con estado)
 network:
   session_affinity: true
 
+# Configuración para la conexión a Cloud SQL
+# ¡Recuerda reemplazar [PROJECT_ID] y [REGION]!
 beta_settings:
-  cloud_sql_instances: [PROJECT_ID]:[REGION]:inventario-ropa-tipica-db
+  cloud_sql_instances: crested-acumen-476200-s0:us-central1-c:inventario-ropa-tipica-db
