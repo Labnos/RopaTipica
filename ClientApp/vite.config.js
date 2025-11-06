@@ -12,17 +12,23 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    strictPort: true,
+    strictPort: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:5229', // Backend .NET
+        target: 'http://localhost:5229',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        rewrite: (path) => path,
+        logLevel: 'debug'
       }
+    },
+    cors: {
+      origin: '*',
+      credentials: true
     }
   },
   build: {
-    outDir: '../wwwroot', // Esto hace que el build de producción se copie a wwwroot
+    outDir: '../wwwroot',
     emptyOutDir: true,
     assetsDir: 'assets'
   }

@@ -38,37 +38,77 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // ---------- Configuración JWT ----------
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"];
+var secretKey = jwtSettings.GetValue<string>("SecretKey");
+var issuer = jwtSettings.GetValue<string>("Issuer");
+var audience = jwtSettings.GetValue<string>("Audience");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero
-    };
-});
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = issuer,
+            ValidAudience = audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            ClockSkew = TimeSpan.Zero // No permitir skew de tiempo
+        };
+
+        // Logging para debugging en desarrollo
+        if (builder.Environment.IsDevelopment())
+        {
+            options.Events = new JwtBearerEvents
+            {
+                OnAuthenticationFailed = context =>
+                {
+                    Console.WriteLine($"❌ JWT Authentication Failed: {context.Exception.Message}");
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = context =>
+                {
+                    var claims = context.Principal?.Claims;
+                    Console.WriteLine($"✅ JWT Token Validated. Claims: {string.Join(", ", claims?.Select(c => c.Type) ?? new List<string>())}");
+                    return Task.CompletedTask;
+                }
+            };
+        }
+    });
+
 
 builder.Services.AddAuthorization();
 
 // ---------- Configuración CORS ----------
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowViteDevServer", policyBuilder =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policyBuilder
+            .WithOrigins(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost:5000",
+                "https://localhost:5173",
+                "https://localhost:3000",
+                "https://localhost:5000"
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials()
+            .WithExposedHeaders("Content-Disposition"); // Para descargas
     });
-});
 
+    // Alternativa más simple para desarrollo (menos seguro)
+    // options.AddPolicy("Development", policyBuilder =>
+    // {
+    //     policyBuilder
+    //         .AllowAnyOrigin()
+    //         .AllowAnyMethod()
+    //         .AllowAnyHeader();
+    // });
+});
 // ---------- Servicios personalizados ----------
 builder.Services.AddScoped<InventarioRopaTipica.Helpers.JwtHelper>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IAuthService, InventarioRopaTipica.Services.AuthService>();
@@ -79,6 +119,8 @@ builder.Services.AddScoped<InventarioRopaTipica.Services.IClienteService, Invent
 builder.Services.AddScoped<InventarioRopaTipica.Services.IProveedorService, InventarioRopaTipica.Services.ProveedorService>();
 builder.Services.AddScoped<InventarioRopaTipica.Services.IPromocionService, InventarioRopaTipica.Services.PromocionService>();
 
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
 
 // ---------- Archivos estáticos SPA ----------
 builder.Services.AddSpaStaticFiles(configuration =>
@@ -89,20 +131,50 @@ builder.Services.AddSpaStaticFiles(configuration =>
 // ====================== CONSTRUCCIÓN DEL APP ======================
 var app = builder.Build();
 
+Console.WriteLine("🔄 Verificando y aplicando migraciones de base de datos...");
+try
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        
+        // Obtener migraciones pendientes
+        var pendingMigrations = dbContext.Database.GetPendingMigrations();
+        
+        if (pendingMigrations.Any())
+        {
+            Console.WriteLine($"📋 Migraciones pendientes encontradas: {string.Join(", ", pendingMigrations)}");
+            dbContext.Database.Migrate();
+            Console.WriteLine("✅ Migraciones aplicadas exitosamente");
+        }
+        else
+        {
+            Console.WriteLine("✅ Base de datos está actualizada (sin migraciones pendientes)");
+        }
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Error aplicando migraciones: {ex.Message}");
+    Console.WriteLine($"⚠️ Detalle: {ex.InnerException?.Message}");
+}
+
 // ---------- Pipeline HTTP ----------
+app.UseCors("AllowViteDevServer");
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
-// app.UseHttpsRedirection(); // ⚠️ Desactivar en desarrollo si causa redirecciones no deseadas
+app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseSpaStaticFiles();
 
 app.UseRouting();
-app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseTokenValidation();
 app.UseAuthorization();
