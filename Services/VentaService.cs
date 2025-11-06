@@ -310,35 +310,65 @@ namespace InventarioRopaTipica.Services
 
         public async Task<ApiResponse<List<TopProductoDto>>> GetTopProductosAsync(int topN = 5)
         {
-            var top = await _context.DetalleVentas
-                .Include(dv => dv.Producto)
-                .GroupBy(dv => dv.Producto.Nombre)
-                .Select(g => new TopProductoDto
-                {
-                    Producto = g.Key,
-                    CantidadVendida = g.Sum(x => x.Cantidad)
-                })
-                .OrderByDescending(x => x.CantidadVendida)
-                .Take(topN)
-                .ToListAsync();
+            try
+            {
+                // 1. FIX: Aggregate quantities by ProductId (safe for EF Core translation)
+                var topAggregated = await _context.DetalleVentas
+                    .GroupBy(dv => dv.ProductoId)
+                    .Select(g => new 
+                    {
+                        ProductoId = g.Key,
+                        CantidadVendida = g.Sum(x => x.Cantidad)
+                    })
+                    .OrderByDescending(x => x.CantidadVendida)
+                    .Take(topN)
+                    .ToListAsync(); // Materialize the top IDs and counts
 
-            return ApiResponse<List<TopProductoDto>>.SuccessResponse(top);
+                // 2. Fetch the corresponding Product Names (assuming ProductoId is not null)
+                var productIds = topAggregated.Select(x => x.ProductoId).ToList();
+                var productsMap = await _context.Productos
+                    .Where(p => productIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.Nombre);
+                
+                // 3. Map the aggregated data to the final DTO in memory
+                var result = topAggregated.Select(x => new TopProductoDto
+                {
+                    // Use GetValueOrDefault for safe lookup
+                    Producto = productsMap.GetValueOrDefault(x.ProductoId, "Producto Desconocido"),
+                    CantidadVendida = x.CantidadVendida
+                }).ToList();
+
+                return ApiResponse<List<TopProductoDto>>.SuccessResponse(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener productos más vendidos");
+                return ApiResponse<List<TopProductoDto>>.ErrorResponse($"Error al obtener top productos: {ex.Message}");
+            }
         }
 
         public async Task<ApiResponse<List<object>>> GetVentasMensualesAsync(int year)
         {
-            var ventas = await _context.Ventas
-                .Where(v => v.Fecha.Year == year && v.EstadoVenta != "Cancelada")
-                .GroupBy(v => v.Fecha.Month)
-                .Select(g => new
-                {
-                    Mes = g.Key,
-                    Total = g.Sum(x => x.Total)
-                })
-                .OrderBy(x => x.Mes)
-                .ToListAsync();
+            try // ADDED: try block
+            {
+                var ventas = await _context.Ventas
+                    .Where(v => v.Fecha.Year == year && v.EstadoVenta != "Cancelada")
+                    .GroupBy(v => v.Fecha.Month)
+                    .Select(g => new
+                    {
+                        Mes = g.Key,
+                        Total = g.Sum(x => x.Total)
+                    })
+                    .OrderBy(x => x.Mes)
+                    .ToListAsync();
 
-            return ApiResponse<List<object>>.SuccessResponse(ventas.Cast<object>().ToList());
+                return ApiResponse<List<object>>.SuccessResponse(ventas.Cast<object>().ToList());
+            }
+            catch (Exception ex) // ADDED: catch block to handle exceptions gracefully
+            {
+                _logger.LogError(ex, "Error al obtener ventas mensuales para el año {Year}", year);
+                return ApiResponse<List<object>>.ErrorResponse($"Error al obtener ventas mensuales: {ex.Message}");
+            }
         }
 
         public async Task<ApiResponse<object>> GetResumenVentasAsync()
@@ -362,18 +392,21 @@ namespace InventarioRopaTipica.Services
             });
         }
 
-        public async Task<ApiResponse<DashboardResumenDto>> GetDashboardResumenAsync()
+       public async Task<ApiResponse<DashboardResumenDto>> GetDashboardResumenAsync()
         {
             try
             {
                 var hoy = DateTime.Today;
+                // FIX: Use a time range check (>= start of day AND < next day)
+                var startOfDay = hoy.Date;
+                var endOfDay = hoy.Date.AddDays(1);
 
                 var ingresosHoy = await _context.Ventas
-                    .Where(v => v.Fecha.Date == hoy && v.EstadoVenta == "Completada")
+                    .Where(v => v.Fecha >= startOfDay && v.Fecha < endOfDay && v.EstadoVenta == "Completada")
                     .SumAsync(v => (decimal?)v.Total) ?? 0;
 
                 var ventasHoy = await _context.Ventas
-                    .CountAsync(v => v.Fecha.Date == hoy && v.EstadoVenta == "Completada");
+                    .CountAsync(v => v.Fecha >= startOfDay && v.Fecha < endOfDay && v.EstadoVenta == "Completada");
 
                 var ventasPendientes = await _context.Ventas
                     .CountAsync(v => v.EstadoPago == "Pendiente");

@@ -14,7 +14,7 @@ namespace InventarioRopaTipica.Services
             _context = context;
         }
 
-        public async Task<ApiResponse<List<ProductoDto>>> GetAllProductosAsync()
+       public async Task<ApiResponse<List<ProductoDto>>> GetAllProductosAsync()
         {
             try
             {
@@ -36,9 +36,11 @@ namespace InventarioRopaTipica.Services
                         EstadoCorte = p.EstadoCorte,
                         FechaCompra = p.FechaCompra,
                         ProveedorId = p.ProveedorId,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : null,
+                        // FIX: Use direct access. EF Core translates this safely if Provider is null.
+                        ProveedorNombre = p.Proveedor.Nombre, 
                         SucursalId = p.SucursalId,
-                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : null,
+                        // FIX: Use direct access.
+                        SucursalNombre = p.Sucursal.Nombre, 
                         CreadoEn = p.CreadoEn
                     })
                     .OrderByDescending(p => p.CreadoEn)
@@ -282,7 +284,8 @@ namespace InventarioRopaTipica.Services
                     .Include(p => p.Sucursal)
                     .Where(p => 
                         (p.Tipo != "Corte" && p.Stock < 5) || 
-                        (p.Tipo == "Corte" && p.VarasDisponibles < 3))
+                        // FIX: Use null-coalescing (?? 0) to safely compare VarasDisponibles
+                        (p.Tipo == "Corte" && (p.VarasDisponibles ?? 0) < 3))
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
@@ -292,8 +295,10 @@ namespace InventarioRopaTipica.Services
                         Stock = p.Stock,
                         VarasDisponibles = p.VarasDisponibles,
                         EstadoCorte = p.EstadoCorte,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : null,
-                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : null
+                        // FIX: Use direct access
+                        ProveedorNombre = p.Proveedor.Nombre,
+                        // FIX: Use direct access
+                        SucursalNombre = p.Sucursal.Nombre
                     })
                     .ToListAsync();
 
