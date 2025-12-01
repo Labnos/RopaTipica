@@ -3,25 +3,25 @@ using System.ComponentModel.DataAnnotations;
 namespace InventarioRopaTipica.DTOs
 {
     public class ProductoDto
-    {
-        public int Id { get; set; }
-        public string Codigo { get; set; }
-        public string Nombre { get; set; }
-        public string Descripcion { get; set; }
-        public string Tipo { get; set; }
-        public decimal PrecioCompra { get; set; }
-        public decimal PrecioVenta { get; set; }
-        public int Stock { get; set; }
-        public decimal? VarasDisponibles { get; set; }
-        public decimal? VarasOriginales { get; set; }
-        public string EstadoCorte { get; set; }
-        public DateTime? FechaCompra { get; set; }
-        public int? ProveedorId { get; set; }
-        public string ProveedorNombre { get; set; }
-        public int? SucursalId { get; set; }
-        public string SucursalNombre { get; set; }
-        public DateTime CreadoEn { get; set; }
-    }
+{
+    public int Id { get; set; }
+    public string? Codigo { get; set; }              // ✅ Nullable
+    public string? Nombre { get; set; }             // ✅ O usar ?? en SELECT
+    public string? Descripcion { get; set; }        // ✅ Nullable
+    public string? Tipo { get; set; }               // ✅ O usar ?? en SELECT
+    public decimal PrecioCompra { get; set; }
+    public decimal PrecioVenta { get; set; }
+    public int Stock { get; set; }
+    public decimal? VarasDisponibles { get; set; }
+    public decimal? VarasOriginales { get; set; }
+    public string? EstadoCorte { get; set; }        // ✅ Nullable
+    public DateTime? FechaCompra { get; set; }
+    public int? ProveedorId { get; set; }
+    public string? ProveedorNombre { get; set; }    // ✅ Nullable
+    public int? SucursalId { get; set; }
+    public string? SucursalNombre { get; set; }     // ✅ Nullable
+    public DateTime CreadoEn { get; set; }
+}
 
     public class CreateProductoDto
     {

@@ -24,23 +24,21 @@ namespace InventarioRopaTipica.Services
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
-                        Codigo = p.Codigo,
-                        Nombre = p.Nombre,
-                        Descripcion = p.Descripcion,
-                        Tipo = p.Tipo,
+                        Codigo = p.Codigo ?? string.Empty,
+                        Nombre = p.Nombre ?? string.Empty,
+                        Descripcion = p.Descripcion ?? string.Empty,
+                        Tipo = p.Tipo ?? string.Empty,
                         PrecioCompra = p.PrecioCompra,
                         PrecioVenta = p.PrecioVenta,
                         Stock = p.Stock,
-                        VarasDisponibles = p.VarasDisponibles,
-                        VarasOriginales = p.VarasOriginales,
-                        EstadoCorte = p.EstadoCorte,
+                        VarasDisponibles = p.VarasDisponibles ?? 8.00m,
+                        VarasOriginales = p.VarasOriginales ?? 8.00m,
+                        EstadoCorte = p.EstadoCorte ?? "Completo",
                         FechaCompra = p.FechaCompra,
                         ProveedorId = p.ProveedorId,
-                        // FIX: Use direct access. EF Core translates this safely if Provider is null.
-                        ProveedorNombre = p.Proveedor.Nombre, 
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : "Sin Proveedor",
                         SucursalId = p.SucursalId,
-                        // FIX: Use direct access.
-                        SucursalNombre = p.Sucursal.Nombre, 
+                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : "Sin Sucursal",
                         CreadoEn = p.CreadoEn
                     })
                     .OrderByDescending(p => p.CreadoEn)
@@ -65,21 +63,21 @@ namespace InventarioRopaTipica.Services
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
-                        Codigo = p.Codigo,
-                        Nombre = p.Nombre,
-                        Descripcion = p.Descripcion,
-                        Tipo = p.Tipo,
+                        Codigo = p.Codigo ?? string.Empty,
+                        Nombre = p.Nombre ?? string.Empty,
+                        Descripcion = p.Descripcion ?? string.Empty,
+                        Tipo = p.Tipo ?? string.Empty,
                         PrecioCompra = p.PrecioCompra,
                         PrecioVenta = p.PrecioVenta,
                         Stock = p.Stock,
-                        VarasDisponibles = p.VarasDisponibles,
-                        VarasOriginales = p.VarasOriginales,
-                        EstadoCorte = p.EstadoCorte,
+                        VarasDisponibles = p.VarasDisponibles ?? 8.00m,
+                        VarasOriginales = p.VarasOriginales ?? 8.00m,
+                        EstadoCorte = p.EstadoCorte ?? "Completo",
                         FechaCompra = p.FechaCompra,
                         ProveedorId = p.ProveedorId,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : null,
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : "Sin Proveedor",
                         SucursalId = p.SucursalId,
-                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : null,
+                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : "Sin Sucursal",
                         CreadoEn = p.CreadoEn
                     })
                     .FirstOrDefaultAsync();
@@ -106,21 +104,21 @@ namespace InventarioRopaTipica.Services
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
-                        Codigo = p.Codigo,
-                        Nombre = p.Nombre,
-                        Descripcion = p.Descripcion,
-                        Tipo = p.Tipo,
+                        Codigo = p.Codigo ?? string.Empty,
+                        Nombre = p.Nombre ?? string.Empty,
+                        Descripcion = p.Descripcion ?? string.Empty,
+                        Tipo = p.Tipo ?? string.Empty,
                         PrecioCompra = p.PrecioCompra,
                         PrecioVenta = p.PrecioVenta,
                         Stock = p.Stock,
-                        VarasDisponibles = p.VarasDisponibles,
-                        VarasOriginales = p.VarasOriginales,
-                        EstadoCorte = p.EstadoCorte,
+                        VarasDisponibles = p.VarasDisponibles ?? 8.00m,
+                        VarasOriginales = p.VarasOriginales ?? 8.00m,
+                        EstadoCorte = p.EstadoCorte ?? "Completo",
                         FechaCompra = p.FechaCompra,
                         ProveedorId = p.ProveedorId,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : null,
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : "Sin Proveedor",
                         SucursalId = p.SucursalId,
-                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : null,
+                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : "Sin Sucursal",
                         CreadoEn = p.CreadoEn
                     })
                     .ToListAsync();
@@ -144,21 +142,21 @@ namespace InventarioRopaTipica.Services
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
-                        Codigo = p.Codigo,
-                        Nombre = p.Nombre,
-                        Descripcion = p.Descripcion,
-                        Tipo = p.Tipo,
+                        Codigo = p.Codigo ?? string.Empty,
+                        Nombre = p.Nombre ?? string.Empty,
+                        Descripcion = p.Descripcion ?? string.Empty,
+                        Tipo = p.Tipo ?? string.Empty,
                         PrecioCompra = p.PrecioCompra,
                         PrecioVenta = p.PrecioVenta,
                         Stock = p.Stock,
-                        VarasDisponibles = p.VarasDisponibles,
-                        VarasOriginales = p.VarasOriginales,
-                        EstadoCorte = p.EstadoCorte,
+                        VarasDisponibles = p.VarasDisponibles ?? 8.00m,
+                        VarasOriginales = p.VarasOriginales ?? 8.00m,
+                        EstadoCorte = p.EstadoCorte ?? "Completo",
                         FechaCompra = p.FechaCompra,
                         ProveedorId = p.ProveedorId,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : null,
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : "Sin Proveedor",
                         SucursalId = p.SucursalId,
-                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : null,
+                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : "Sin Sucursal",
                         CreadoEn = p.CreadoEn
                     })
                     .ToListAsync();
@@ -284,21 +282,26 @@ namespace InventarioRopaTipica.Services
                     .Include(p => p.Sucursal)
                     .Where(p => 
                         (p.Tipo != "Corte" && p.Stock < 5) || 
-                        // FIX: Use null-coalescing (?? 0) to safely compare VarasDisponibles
                         (p.Tipo == "Corte" && (p.VarasDisponibles ?? 0) < 3))
                     .Select(p => new ProductoDto
                     {
                         Id = p.Id,
-                        Codigo = p.Codigo,
-                        Nombre = p.Nombre,
-                        Tipo = p.Tipo,
+                        Codigo = p.Codigo ?? string.Empty,
+                        Nombre = p.Nombre ?? string.Empty,
+                        Descripcion = p.Descripcion ?? string.Empty,
+                        Tipo = p.Tipo ?? string.Empty,
+                        PrecioCompra = p.PrecioCompra,
+                        PrecioVenta = p.PrecioVenta,
                         Stock = p.Stock,
-                        VarasDisponibles = p.VarasDisponibles,
-                        EstadoCorte = p.EstadoCorte,
-                        // FIX: Use direct access
-                        ProveedorNombre = p.Proveedor.Nombre,
-                        // FIX: Use direct access
-                        SucursalNombre = p.Sucursal.Nombre
+                        VarasDisponibles = p.VarasDisponibles ?? 8.00m,
+                        VarasOriginales = p.VarasOriginales ?? 8.00m,
+                        EstadoCorte = p.EstadoCorte ?? "Completo",
+                        FechaCompra = p.FechaCompra,
+                        ProveedorId = p.ProveedorId,
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.Nombre : "Sin Proveedor",
+                        SucursalId = p.SucursalId,
+                        SucursalNombre = p.Sucursal != null ? p.Sucursal.Nombre : "Sin Sucursal",
+                        CreadoEn = p.CreadoEn
                     })
                     .ToListAsync();
 

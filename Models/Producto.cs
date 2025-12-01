@@ -13,7 +13,7 @@ namespace InventarioRopaTipica.Models
 
         [MaxLength(50)]
         [Column("codigo")]
-        public string Codigo { get; set; }
+        public string? Codigo { get; set; }
 
         [Required]
         [MaxLength(150)]
@@ -21,7 +21,7 @@ namespace InventarioRopaTipica.Models
         public string Nombre { get; set; }
 
         [Column("descripcion")]
-        public string Descripcion { get; set; }
+        public string? Descripcion { get; set; }
 
         [Required]
         [Column("tipo")]
@@ -46,7 +46,7 @@ namespace InventarioRopaTipica.Models
         public decimal? VarasOriginales { get; set; } = 8.00m;
 
         [Column("estado_corte")]
-        public string EstadoCorte { get; set; } = "Completo"; // Completo, Parcial, Agotado
+        public string? EstadoCorte { get; set; } = "Completo"; // Completo, Parcial, Agotado
 
         [Column("fecha_compra")]
         public DateTime? FechaCompra { get; set; }
@@ -62,12 +62,12 @@ namespace InventarioRopaTipica.Models
 
         // Navegación
         [ForeignKey("ProveedorId")]
-        public virtual Proveedor Proveedor { get; set; }
+        public virtual Proveedor? Proveedor { get; set; }
 
         [ForeignKey("SucursalId")]
-        public virtual Sucursal Sucursal { get; set; }
+        public virtual Sucursal? Sucursal { get; set; }
 
-        public virtual ICollection<DetalleVenta> DetallesVentas { get; set; }
-        public virtual ICollection<Promocion> Promociones { get; set; }
+        public virtual ICollection<DetalleVenta> DetallesVentas { get; set; } = new List<DetalleVenta>();
+        public virtual ICollection<Promocion> Promociones { get; set; } = new List<Promocion>();
     }
 }
